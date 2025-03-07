@@ -1,17 +1,24 @@
 import os
 import sys
 sys.path.append(os.path.dirname(__file__))
-from Scripts.library_MoChaTo import *
+from library_MoChaTo import *
 import h5py
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
-dataset = r'scnp_e0p15.hdf5'
+datafile = r'C:\Users\jonas\OneDrive\TU Dresden\Physik-Studium, Bachelor\Abschlussarbeit\scnp_e0p15.hdf5'
 filter_obj = 'swell_sqiso_key'
-name = r'solvent_implicit/reactive_thermal/N_100/e_0.15/f_8/p_3/' + filter_obj
+datagroups = [filter_obj, 'swell_sqiso']
+name = r'solvent_implicit/reactive_thermal/N_100/e_0.15/f_8/p_3/'
 
-with h5py.File(dataset, 'r') as file:
-    x, data = load_data(name=name, file=file, filter_obj=filter_obj)
-    print(data.shape[0])
+data = {}
+
+with h5py.File(datafile, 'r') as file:
+    for dataset in datagroups:
+        data[dataset] = load_data(name=name+dataset, file=file)
+    
+    pca = PCA(n_components=2)
+    pca.fit(data['swell_sqiso'])
+    print(f'{pca.components_}')    
