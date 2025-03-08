@@ -13,7 +13,6 @@ import sys
 from os.path import exists
 import h5py
 import numpy as np
-from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
@@ -76,21 +75,30 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
         recon = np.matmul(transf, components)\
                 + np.mean(data['swell_sqiso'], axis=0)
         recon_er = np.sqrt(np.mean((data['swell_sqiso'] - recon)**2))
-               
+
+
+        # important parameters for plotting
+        qmin = 1.05*np.min(data['swell_sqiso_key'])\
+               - 0.05*np.min(data['swell_sqiso_key'])
+        qmax = 1.05*np.max(data['swell_sqiso_key'])\
+               - 0.05*np.min(data['swell_sqiso_key'])
+        Smin = 1.05*np.min(components) - 0.05*np.max(components)
+        Smax = 1.05*np.max(components) - 0.05*np.min(components)
         
         # plot result of PCA on 'swell_sqiso' data (structurial factor),
         # component 1 and 2 dependend on 'swell_sqiso_key'
         fig = plt.figure(figsize=(5, 3))                # create figure
         ax = fig.add_subplot(1, 1, 1)                   # add subplot
+        ax.axis([qmin, qmax, Smin, Smax])               # set axis limits
 
         ax.set_title(r'Principle components dependend on $q$')
-        ax.set_xlabel(r'$q / [q]$')
+        ax.set_xlabel(r'$q$')
         ax.set_ylabel(r'$S_1(q)q^2$')
 
-        ax.plot(data['swell_sqiso_key'],\
+        ax.loglog(data['swell_sqiso_key'],\
                 components[0,:]*data['swell_sqiso_key']**2, lw=1.0,\
                 color='blue', label='Component 1')
-        ax.plot(data['swell_sqiso_key'],\
+        ax.loglog(data['swell_sqiso_key'],\
                 components[1,:]*data['swell_sqiso_key']**2, lw=1.0,\
                 color='red', label='Component 2')
         
@@ -129,7 +137,12 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
         # print and save results in seperate .txt file
         with open(eva_path + seperator + 'results.txt', 'a') as res_file:
             res_file.write(f'{name[:-l]}\n')
-            res_file.write(f'Mean reconstruction error: {round(recon_er,6)}\n')
+            res_file.write('Mean reconstruction error:\n')
+            res_file.write(f'{round(recon_er,6)}\n')
+            res_file.write(f'By component 1 explained variance:\n')
+            res_file.write(f'{round(pca.explained_variance_ratio_[0],6)}\n')
+            res_file.write(f'By component 2 explained variance:\n')
+            res_file.write(f'{round(pca.explained_variance_ratio_[1],6)}\n')
             res_file.write('-'*79 + '\n\n')
 
         # print separator line to indicate end of one condition evaluation in 
