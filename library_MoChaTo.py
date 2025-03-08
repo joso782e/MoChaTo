@@ -79,15 +79,21 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
 
         # important parameters for plotting
         qmin = 1.05*np.min(data['swell_sqiso_key'])\
-               - 0.05*np.min(data['swell_sqiso_key'])
+               - 0.05*np.max(data['swell_sqiso_key'])
         qmax = 1.05*np.max(data['swell_sqiso_key'])\
                - 0.05*np.min(data['swell_sqiso_key'])
-        Smin = 1.05*np.min(components) - 0.05*np.max(components)
-        Smax = 1.05*np.max(components) - 0.05*np.min(components)
+        Smin = 1.05*np.min(components[0,:]*data['swell_sqiso_key']**2,\
+                           components[1,:]*data['swell_sqiso_key']**2)\
+               - 0.05*np.max(components[0,:]*data['swell_sqiso_key']**2,\
+                             components[1,:]*data['swell_sqiso_key']**2)
+        Smax = 1.05*np.max(components[0,:]*data['swell_sqiso_key']**2,\
+                           components[1,:]*data['swell_sqiso_key']**2)\
+               - 0.05*np.min(components[0,:]*data['swell_sqiso_key']**2,\
+                             components[1,:]*data['swell_sqiso_key']**2)
         
         # plot result of PCA on 'swell_sqiso' data (structurial factor),
         # component 1 and 2 dependend on 'swell_sqiso_key'
-        fig = plt.figure(figsize=(5, 3))                # create figure
+        fig = plt.figure(figsize=(8, 6))                # create figure
         ax = fig.add_subplot(1, 1, 1)                   # add subplot
         ax.axis([qmin, qmax, Smin, Smax])               # set axis limits
 
@@ -95,12 +101,12 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
         ax.set_xlabel(r'$q$')
         ax.set_ylabel(r'$S_1(q)q^2$')
 
-        ax.loglog(data['swell_sqiso_key'],\
-                components[0,:]*data['swell_sqiso_key']**2, lw=1.0,\
-                color='blue', label='Component 1')
-        ax.loglog(data['swell_sqiso_key'],\
-                components[1,:]*data['swell_sqiso_key']**2, lw=1.0,\
-                color='red', label='Component 2')
+        ax.plot(data['swell_sqiso_key'],\
+                  components[0,:]*data['swell_sqiso_key']**2, lw=1.0,\
+                  color='blue', label='Component 1')
+        ax.plot(data['swell_sqiso_key'],\
+                  components[1,:]*data['swell_sqiso_key']**2, lw=1.0,\
+                  color='red', label='Component 2')
         
         ax.legend(loc='upper right')
 

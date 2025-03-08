@@ -20,19 +20,20 @@ import glob
 import h5py
 
 
-root_dir = r'C:\Users\jonas\OneDrive\TU Dresden\Physik-Studium, Bachelor\Abschlussarbeit'
+root_dir = r'C:\Users\Jonas Soucek\OneDrive\TU Dresden\Physik-Studium, Bachelor\Abschlussarbeit'
 search_crit = r'\**\*.hdf5'
 
 system = 'windows'              # clearify operating systsem for file handling
 
 filter_obj = 'swell_sqiso_key'
 datagroups = [filter_obj, 'swell_sqiso']
-eva_path = r'C:\Users\jonas\OneDrive\TU Dresden\Physik-Studium, Bachelor\Abschlussarbeit\script_evaluation'
+eva_path = r'C:\Users\Jonas Soucek\OneDrive\TU Dresden\Physik-Studium, Bachelor\Abschlussarbeit\script_evaluation'
 
 
 for path in glob.glob(root_dir+search_crit, recursive=True):
     if not exists(eva_path + r'\results.txt'):
         os.makedirs(eva_path, exist_ok=True)
+
 
     with open(eva_path + r'\results.txt', 'w') as res_file:
         res_file.write(f'File: {path}\n')
@@ -49,3 +50,5 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         file.visit(lambda x: lib.filter_func(name=x, file=file,\
             filter_obj=filter_obj, get_datasets=datagroups, eva_path=eva_path,\
             system=system, TestRun=False))
+
+print('Evaluation finished')
