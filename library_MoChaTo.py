@@ -82,20 +82,20 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
                - 0.05*np.max(data['swell_sqiso_key'])
         qmax = 1.05*np.max(data['swell_sqiso_key'])\
                - 0.05*np.min(data['swell_sqiso_key'])
-        Smin = 1.05*np.min(components[0,:]*data['swell_sqiso_key']**2,\
-                           components[1,:]*data['swell_sqiso_key']**2)\
-               - 0.05*np.max(components[0,:]*data['swell_sqiso_key']**2,\
-                             components[1,:]*data['swell_sqiso_key']**2)
-        Smax = 1.05*np.max(components[0,:]*data['swell_sqiso_key']**2,\
-                           components[1,:]*data['swell_sqiso_key']**2)\
-               - 0.05*np.min(components[0,:]*data['swell_sqiso_key']**2,\
-                             components[1,:]*data['swell_sqiso_key']**2)
+        Smin = 1.05*np.min([components[0,:]*data['swell_sqiso_key']**2,\
+                            components[1,:]*data['swell_sqiso_key']**2])\
+               - 0.05*np.max([components[0,:]*data['swell_sqiso_key']**2,\
+                              components[1,:]*data['swell_sqiso_key']**2])
+        Smax = 1.05*np.max([components[0,:]*data['swell_sqiso_key']**2,\
+                            components[1,:]*data['swell_sqiso_key']**2])\
+               - 0.05*np.min([components[0,:]*data['swell_sqiso_key']**2,\
+                              components[1,:]*data['swell_sqiso_key']**2])
         
         # plot result of PCA on 'swell_sqiso' data (structurial factor),
         # component 1 and 2 dependend on 'swell_sqiso_key'
-        fig = plt.figure(figsize=(8, 6))                # create figure
-        ax = fig.add_subplot(1, 1, 1)                   # add subplot
-        ax.axis([qmin, qmax, Smin, Smax])               # set axis limits
+        fig = plt.figure(figsize=(8, 6))            # create figure
+        ax = fig.add_subplot(1, 1, 1)               # add subplot
+        ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
         ax.set_title(r'Principle components dependend on $q$')
         ax.set_xlabel(r'$q$')
