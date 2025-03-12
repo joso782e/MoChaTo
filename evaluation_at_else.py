@@ -31,8 +31,8 @@ eva_path = r'C:\Users\Jonas Soucek\OneDrive\TU Dresden\Physik-Studium, Bachelor\
 
 
 for path in glob.glob(root_dir+search_crit, recursive=True):
-    if not exists(eva_path + r'\results.txt'):
-        os.makedirs(eva_path, exist_ok=True)
+    if not exists(eva_path):
+        os.makedirs(eva_path)
 
 
     with open(eva_path + r'\results.txt', 'w') as res_file:
