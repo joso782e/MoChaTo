@@ -17,7 +17,6 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 
-
 def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
                 eva_path:str, system:str, TestRun:bool=False) -> None:
     '''
@@ -43,7 +42,6 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
     None
     ---------------------------------------------------------------------------
     '''
-
     # perform data collection, evaluation and plotting for each simulated
     # condition
     if filter_obj in name:
@@ -71,49 +69,16 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
                                                         # principle components
 
         
-        # calculate reconstraction error of PCA
+        # calculate reconstraction error of PCA via root-mean-square method
         recon = np.matmul(transf, components)\
                 + np.mean(data['swell_sqiso'], axis=0)
         recon_er = np.sqrt(np.mean((data['swell_sqiso'] - recon)**2))
 
 
-        # important parameters for plotting
-        qmin = 1.05*np.min(data['swell_sqiso_key'])\
-               - 0.05*np.max(data['swell_sqiso_key'])
-        qmax = 1.05*np.max(data['swell_sqiso_key'])\
-               - 0.05*np.min(data['swell_sqiso_key'])
-        Smin = 1.05*np.min([components[0,:]*data['swell_sqiso_key']**2,\
-                            components[1,:]*data['swell_sqiso_key']**2])\
-               - 0.05*np.max([components[0,:]*data['swell_sqiso_key']**2,\
-                              components[1,:]*data['swell_sqiso_key']**2])
-        Smax = 1.05*np.max([components[0,:]*data['swell_sqiso_key']**2,\
-                            components[1,:]*data['swell_sqiso_key']**2])\
-               - 0.05*np.min([components[0,:]*data['swell_sqiso_key']**2,\
-                              components[1,:]*data['swell_sqiso_key']**2])
-        
-        # plot result of PCA on 'swell_sqiso' data (structurial factor),
-        # component 1 and 2 dependend on 'swell_sqiso_key'
-        fig = plt.figure(figsize=(8, 6))            # create figure
-        ax = fig.add_subplot(1, 1, 1)               # add subplot
-        ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
-
-        ax.set_title(r'Principle components dependend on $q$')
-        ax.set_xlabel(r'$q$')
-        ax.set_ylabel(r'$S_1(q)q^2$')
-
-        ax.plot(data['swell_sqiso_key'],\
-                  components[0,:]*data['swell_sqiso_key']**2, lw=1.0,\
-                  color='blue', label='Component 1')
-        ax.plot(data['swell_sqiso_key'],\
-                  components[1,:]*data['swell_sqiso_key']**2, lw=1.0,\
-                  color='red', label='Component 2')
-        
-        ax.legend(loc='upper right')
-
-        # save and close figure
-        save_plot(fig=fig, name=name, filter_obj=filter_obj,\
-                  eva_path=eva_path, eva_aspect='PCA_comp_plot',\
-                  system=system)
+        # plot principle components in q-space
+        plot_princ_comps(data=data, components=components, name=name,\
+                         filter_obj=filter_obj, eva_path=eva_path,\
+                         system=system)
         
 
         # plot result of PCA on 'swell_sqiso' data (structurial factor),
@@ -216,9 +181,18 @@ def save_plot(fig:plt.Figure, name:str, filter_obj:str, eva_path:str,\
     elif system == 'linux':
         seperator = '/'                     # define seperator for linux
                                             # operating system
-    
-    # define path to save figure as .png file
-    path = eva_path + seperator +'plots' + seperator + eva_aspect
+
+    # define path to safe plot depending on chain length
+    if 'N_40' in name:
+        path = eva_path + seperator +'plots'  + seperator + eva_aspect\
+               + seperator + 'N_40'
+    elif 'N_100' in name:
+        path = eva_path + seperator +'plots' + seperator + eva_aspect\
+               + seperator + 'N_100'
+    elif 'N_200' in name:
+        path = eva_path + seperator +'plots' + seperator + eva_aspect\
+               + seperator + 'N_200'
+
     
     # create directories if they do not exist
     if not exists(path):
@@ -228,3 +202,91 @@ def save_plot(fig:plt.Figure, name:str, filter_obj:str, eva_path:str,\
     fig.savefig(path + seperator + name[:-l].replace('/', '&') + '.png')
     plt.pause(0.1)                                  # pause for 0.1 seconds
     plt.close()                                     # close figure
+
+
+def plot_princ_comps(data:dict, components:np.ndarray, name:str,\
+                     filter_obj:str, eva_path:str, system:str)\
+    -> None:
+    '''
+    Function to make script more clear. It contains all lines regarding
+    the plot of the principle components.
+    '''
+
+    # important parameters for plotting principle components
+    qmin = 1.05*np.min(data['swell_sqiso_key'])\
+            - 0.05*np.max(data['swell_sqiso_key'])
+    qmax = 1.05*np.max(data['swell_sqiso_key'])\
+            - 0.05*np.min(data['swell_sqiso_key'])
+    Smin = 1.05*np.min([components[0,:]*data['swell_sqiso_key']**2,\
+                        components[1,:]*data['swell_sqiso_key']**2])\
+            - 0.05*np.max([components[0,:]*data['swell_sqiso_key']**2,\
+                            components[1,:]*data['swell_sqiso_key']**2])
+    Smax = 1.05*np.max([components[0,:]*data['swell_sqiso_key']**2,\
+                        components[1,:]*data['swell_sqiso_key']**2])\
+            - 0.05*np.min([components[0,:]*data['swell_sqiso_key']**2,\
+                            components[1,:]*data['swell_sqiso_key']**2])
+    
+    # plot result of PCA on 'swell_sqiso' data (structurial factor),
+    # component 1 and 2 dependend on 'swell_sqiso_key'
+    fig = plt.figure(figsize=(8, 6))            # create figure
+    ax = fig.add_subplot(1, 1, 1)               # add subplot
+    ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
+
+    ax.set_title(r'Principle components dependend on $q$')
+    ax.set_xlabel(r'$q$')
+    ax.set_ylabel(r'$S_1(q)q^2$')
+
+    ax.plot(data['swell_sqiso_key'],\
+                components[0,:]*data['swell_sqiso_key']**2, lw=1.0,\
+                color='blue', label='Component 1')
+    ax.plot(data['swell_sqiso_key'],\
+                components[1,:]*data['swell_sqiso_key']**2, lw=1.0,\
+                color='red', label='Component 2')
+    
+    ax.legend(loc='upper right')
+
+    # save and close figure
+    save_plot(fig=fig, name=name, filter_obj=filter_obj,\
+              eva_path=eva_path, eva_aspect='PCA_comp_plot',\
+              system=system)
+    
+
+class FileData:
+    '''
+    Class to store and update results for comprehensive file evaluation after 
+    individual file evaluation.
+    '''
+    # define contructor
+    def __init__(self, NChain:int, InterconDens:int, qKey:np.ndarray,\
+                 SData:np.ndarray, components:np.ndarray, ExplVar:np.ndarray,\
+                 ExplVarRatio:np.ndarray, ReconSData:np.ndarray):
+        self.length = NChain
+        self.f = InterconDens
+        self.q = qKey
+        self.S = SData
+        self.comps = components
+        self.var = ExplVar
+        self.varratio = ExplVarRatio
+        self.reconS = ReconSData
+        self.mre = np.sqrt(np.mean((self.reconS - self.S)**2))
+        self.re = np.sqrt(np.mean((self.reconS - self.S)**2, axis=0))
+
+    @staticmethod
+    def ExtractFileData(file:h5py.File, path:str, filter_obj:str, ncomps:int):
+
+        l = len(filter_obj)         # length of filter_object
+
+        if 'N_40' in path:
+            NChain = 40
+        elif 'N_100' in path:
+            NChain = 100
+        elif 'N_200' in path:
+            NChain = 200
+
+        # get 'swell_sqiso_key' group and reshape it from (m, 1) to (m)
+        qKey = np.squeeze(file[path])
+
+        # get 'swell_sqiso' group and reshape it from (m, n, 1) to (m, n)
+        SData = np.squeeze(file[path[:-l]+'swell_sqiso'])
+
+        return FileData(NChain=NChain, InterconDens=, qKey=qKey, SData=SData, components=, ExplVar=, ExplVarRatio=, ReconSData=)
