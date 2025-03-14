@@ -25,7 +25,7 @@ class FileData:
     # define contructor
     def __init__(self, Cond:str, NChain:int, InterconDens:int,\
                  qKey:np.ndarray, SData:np.ndarray, NComps:int):
-        self.condition = Cond           # string describing simulated condition
+        self.condi = Cond               # string describing simulated condition
         self.length = NChain            # chainlength in number of spheres
         self.f = InterconDens           # connector distance
         self.q = qKey                   # values in q-space
@@ -80,13 +80,14 @@ class FileData:
         # get 'swell_sqiso' group and reshape it from (m, n, 1) to (m, n)
         SData = np.squeeze(file[path[:-l]+'swell_sqiso'])
 
-        return FileData(Cond=Cond, NChain=NChain, InterconDens=, qKey=qKey, SData=SData, NComps=ncomps)
+        return FileData(Cond=Cond, NChain=NChain, InterconDens=InterconDens,\
+                        qKey=qKey, SData=SData, NComps=ncomps)
 
 
-def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
-                eva_path:str, system:str, TestRun:bool=False) -> None:
+def filter_func(name:str, file:h5py.File, NComps:int, DataObjs:list,\
+                filter_obj:str, eva_path:str, system:str, TestRun:bool=False)\
+    -> None:
     '''
-
     Function to filter data groups in .hdf5 'input_file' that contain the
     string 'filter_obj' and perform data collection, evaluation and plotting
     on them
@@ -94,10 +95,10 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
     input variables:
     name (dtype = str)...           name of data group to be filtered
     file (dtype = h5py.File)...     input file
+    NComps (dtype = int)...         number of principal components to perform 
+                                    PCA with
     filter_obj (dtype = str)...     name of one data group to filter simulated
                                     conditions in .hdf5 'input_file'
-    get_datasets (dtype = list)...  list of data groups to be loaded from .hdf5
-                                    'input_file'
     eva_path (dtype = str)...       path to save evaluation results and plots
     system (dtype = str)...         name of operating system,
                                     either 'windows' or 'linux'
@@ -120,13 +121,14 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
 
 
         # perform PCA on 'swell_sqiso' data
-        pca = PCA(n_components=DataObj.ncomps)          # set PCA object
-        pca.fit(FileObj.S)                              # fit PCA object to 
-                                                        # data
-        DataObj.comps = pca.components_                 # get principle 
-                                                        # components
-        transf = pca.transform(DataObj.S)               # transform data to
-                                                        # principle components
+        pca = PCA(n_components=DataObj.ncomps)              # set PCA object
+        pca.fit(DataObj.S)                                  # fit PCA object
+                                                            # to data
+        DataObj.comps = pca.components_                     # get principle 
+                                                            # components
+        DataObj.varratio = pca.explained_variance_ratio_    # get explained
+                                                            # variance ratio
+        transf = pca.transform(DataObj.S)                   # transform data to
 
         
         # calculate reconstraction error of PCA via root-mean-square method
@@ -137,9 +139,7 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
 
 
         # plot principle components in q-space
-        plot_princ_comps(data=data, components=components, name=name,\
-                         filter_obj=filter_obj, eva_path=eva_path,\
-                         system=system)
+        plot_princ_comps(DataObj=DataObj, eva_path=eva_path,  system=system)
         
 
         # plot result of PCA on 'swell_sqiso' data (structurial factor),
@@ -168,105 +168,60 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
 
         # print and save results in seperate .txt file
         with open(eva_path + seperator + 'results.txt', 'a') as res_file:
-            res_file.write(f'{name[:-l]}\n')
+            res_file.write(f'{DataObj.condi}\n')
             res_file.write('Mean reconstruction error:\n')
-            res_file.write(f'{round(recon_er,6)}\n')
-            res_file.write(f'By component 1 explained variance:\n')
-            res_file.write(f'{round(pca.explained_variance_ratio_[0],6)}\n')
-            res_file.write(f'By component 2 explained variance:\n')
-            res_file.write(f'{round(pca.explained_variance_ratio_[1],6)}\n')
+            res_file.write(f'{round(DataObj.mre,6)}\n')
+            res_file.write(f'Variance ratio explained by component 1:\n')
+            res_file.write(f'{round(DataObj.varratio[0],6)}\n')
+            res_file.write(f'Variance ratio explained by component 2:\n')
+            res_file.write(f'{round(DataObj.varratio[1],6)}\n')
             res_file.write('-'*79 + '\n\n')
 
         # print separator line to indicate end of one condition evaluation in 
         # terminal during debugging
         # print('-'*79)
         
+        DataObjs.append(DataObj)
 
         if TestRun:
             sys.exit()          # exit script if TestRun flag is set to True
-        
-        
-def load_data(name:str, file:h5py.File) -> np.ndarray:
-    '''
-
-    Function to load data groups from .hdf5 'input_file'
-
-    input variables:
-    name (dtype = str)...           name of data group to be filtered
-    file (dtype = h5py.File)...     input file
-    filter_obj (dtype = str)...     name of one data group to filter simulated
-                                    conditions in .hdf5 'input_file'
-    get_dataset (dtype = str)...    name of data group to be loaded from
-                                    'input_file'
-
-    output variables:
-    data (dtype = np.ndarray)...    data loaded from 'input_file'
-    ---------------------------------------------------------------------------
-    '''
-
-    # load data from dataset 'swell_sqiso'
-    data = file[name]
-
-    # get shape of data and reshape it from (m, n, 1) to (m, n)
-    data = np.squeeze(data)
-
-    return data
 
     
-def save_plot(fig:plt.Figure, name:str, filter_obj:str, eva_path:str,\
-              eva_aspect:str, system:str) -> None:
+def save_plot(fig:plt.Figure, name:str, path:str, system:str,\
+              fileformat:str='.png') -> None:
     '''
-
-    Function to plot data
+    Function to safe plot
 
     input variables:
     fig (dtype = plt.Figure)...     figure with ploted data
-    name (dtype = str)...           name of data group
-    filter_obj (dtype = str)...     name of one data group to filter simulated
-                                    conditions in .hdf5 'input_file'
-    eva_path (dtype = str)...       path to save evaluation results and plots
-    eva_aspect (dtype = str)...     name of evaluation aspect to be ploted
+    name (dtype = str)...           name of plot file
+    path (dtype = str)...           path to safe plot file
     system (dtype = str)...         name of operating system,
                                     either 'windows' or 'linux'
+    fileformat (dtype = str)...     file format to safe plot file to
 
     output variables:
     None
     ---------------------------------------------------------------------------
     '''   
-
-    l = len(filter_obj)                     # length of 'filter_obj' string
-
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
                                             # operating system
     elif system == 'linux':
         seperator = '/'                     # define seperator for linux
                                             # operating system
-
-    # define path to safe plot depending on chain length
-    if 'N_40' in name:
-        path = eva_path + seperator +'plots'  + seperator + eva_aspect\
-               + seperator + 'N_40'
-    elif 'N_100' in name:
-        path = eva_path + seperator +'plots' + seperator + eva_aspect\
-               + seperator + 'N_100'
-    elif 'N_200' in name:
-        path = eva_path + seperator +'plots' + seperator + eva_aspect\
-               + seperator + 'N_200'
-
     
     # create directories if they do not exist
     if not exists(path):
         os.makedirs(path)
     
     # save figure as .png
-    fig.savefig(path + seperator + name + '.png')
+    fig.savefig(path + seperator + name + fileformat)
     plt.pause(0.1)                                  # pause for 0.1 seconds
     plt.close()                                     # close figure
 
 
-def plot_princ_comps(data:dict, components:np.ndarray, name:str,\
-                     filter_obj:str, eva_path:str, system:str)\
+def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
     -> None:
     '''
     Function to make script more clear. It contains all lines regarding
@@ -274,18 +229,16 @@ def plot_princ_comps(data:dict, components:np.ndarray, name:str,\
     '''
 
     # important parameters for plotting principle components
-    qmin = 1.05*np.min(data['swell_sqiso_key'])\
-            - 0.05*np.max(data['swell_sqiso_key'])
-    qmax = 1.05*np.max(data['swell_sqiso_key'])\
-            - 0.05*np.min(data['swell_sqiso_key'])
-    Smin = 1.05*np.min([components[0,:]*data['swell_sqiso_key']**2,\
-                        components[1,:]*data['swell_sqiso_key']**2])\
-            - 0.05*np.max([components[0,:]*data['swell_sqiso_key']**2,\
-                            components[1,:]*data['swell_sqiso_key']**2])
-    Smax = 1.05*np.max([components[0,:]*data['swell_sqiso_key']**2,\
-                        components[1,:]*data['swell_sqiso_key']**2])\
-            - 0.05*np.min([components[0,:]*data['swell_sqiso_key']**2,\
-                            components[1,:]*data['swell_sqiso_key']**2])
+    qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
+    qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
+    Smin = 1.05*np.min([DataObj.comps[0,:]*DataObj.q**2,\
+                        DataObj.comps[1,:]*DataObj.q**2])\
+            - 0.05*np.max([DataObj.comps[0,:]*DataObj.q**2,\
+                            DataObj.comps[1,:]*DataObj.q**2])
+    Smax = 1.05*np.max([DataObj.comps[0,:]*DataObj.q**2,\
+                        DataObj.comps[1,:]*DataObj.q**2])\
+            - 0.05*np.min([DataObj.comps[0,:]*DataObj.q**2,\
+                            DataObj.comps[1,:]*DataObj.q**2])
     
     # plot result of PCA on 'swell_sqiso' data (structurial factor),
     # component 1 and 2 dependend on 'swell_sqiso_key'
@@ -297,16 +250,31 @@ def plot_princ_comps(data:dict, components:np.ndarray, name:str,\
     ax.set_xlabel(r'$q$')
     ax.set_ylabel(r'$S_1(q)q^2$')
 
-    ax.plot(data['swell_sqiso_key'],\
-                components[0,:]*data['swell_sqiso_key']**2, lw=1.0,\
-                color='blue', label='Component 1')
-    ax.plot(data['swell_sqiso_key'],\
-                components[1,:]*data['swell_sqiso_key']**2, lw=1.0,\
-                color='red', label='Component 2')
+    ax.plot(DataObj.q, DataObj.comps[0,:]*DataObj.q**2, lw=1.0,\
+            color='blue', label='Component 1')
+    ax.plot(DataObj.q, DataObj.comps[1,:]*DataObj.q**2, lw=1.0,\
+            color='red', label='Component 2')
     
     ax.legend(loc='upper right')
 
+
+    if system == 'windows':
+        seperator = '\\'                    # define seperator for windows 
+                                            # operating system
+    elif system == 'linux':
+        seperator = '/'                     # define seperator for linux
+                                            # operating system
+
+    # define path to safe plot depending on chain length
+    if DataObj.f == 40:
+        path = eva_path + seperator +'plots'  + seperator + 'PCA_comp_plot'\
+               + seperator + 'N_40'
+    elif DataObj.f == 100:
+        path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
+               + seperator + 'N_100'
+    elif DataObj.f == 200:
+        path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
+               + seperator + 'N_200'
+
     # save and close figure
-    save_plot(fig=fig, name=name, filter_obj=filter_obj,\
-              eva_path=eva_path, eva_aspect='PCA_comp_plot',\
-              system=system)
+    save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
