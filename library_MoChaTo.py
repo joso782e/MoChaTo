@@ -17,6 +17,72 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 
+class FileData:
+    '''
+    Class to store and update results for comprehensive file evaluation after 
+    individual file evaluation.
+    '''
+    # define contructor
+    def __init__(self, Cond:str, NChain:int, InterconDens:int,\
+                 qKey:np.ndarray, SData:np.ndarray, NComps:int):
+        self.condition = Cond           # string describing simulated condition
+        self.length = NChain            # chainlength in number of spheres
+        self.f = InterconDens           # connector distance
+        self.q = qKey                   # values in q-space
+        self.S = SData                  # structural factor in q-space
+        self.ncomps = NComps            # number of principle components
+        self.reconS = None              # reconstructed data from PCA
+        self.comps = None               # principle components, sorted via
+                                        # explained variance
+        self.var = None                 # explained variance, sorted from
+                                        # highets to lowest
+        self.varratio = None            # percentage of explained variance
+        self.mre = None                 # mean reconstraction error
+        self.re = None                  # mean reconstruction error in q-space
+
+    @staticmethod
+    def ExtractFileData(file:h5py.File, path:str, filter_obj:str, ncomps:int):
+
+        l = len(filter_obj)         # length of filter_object
+        Cond = path[:-l].replace('/', '&')
+
+        if 'N_40' in path:
+            NChain = 40
+        elif 'N_100' in path:
+            NChain = 100
+        elif 'N_200' in path:
+            NChain = 200
+
+        if 'f_2' in path:
+            InterconDens = 2
+        elif 'f_3' in path:
+            InterconDens = 3
+        elif 'f_4' in path:
+            InterconDens = 4
+        elif 'f_5' in path:
+            InterconDens = 5
+        elif 'f_6' in path:
+            InterconDens = 6
+        elif 'f_7' in path:
+            InterconDens = 7
+        elif 'f_8' in path:
+            InterconDens = 8
+        elif 'f_12' in path:
+            InterconDens = 12
+        elif 'f_18' in path:
+            InterconDens = 18
+        elif 'f_23' in path:
+            InterconDens = 23
+
+        # get 'swell_sqiso_key' group and reshape it from (m, 1) to (m)
+        qKey = np.squeeze(file[path])
+
+        # get 'swell_sqiso' group and reshape it from (m, n, 1) to (m, n)
+        SData = np.squeeze(file[path[:-l]+'swell_sqiso'])
+
+        return FileData(Cond=Cond, NChain=NChain, InterconDens=, qKey=qKey, SData=SData, NComps=ncomps)
+
+
 def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
                 eva_path:str, system:str, TestRun:bool=False) -> None:
     '''
@@ -48,31 +114,26 @@ def filter_func(name:str, file:h5py.File, filter_obj:str, get_datasets:list,\
         # print name in terminal for debugging
         print(f'{name}')
 
-        # create dictionary of datasets for current condition
-        data = {}
-
-        l = len(filter_obj)                     # length of 'filter_obj' string
-
-        # load data from object 'file' according to values in list
-        # 'get_datasets'
-        for dataset in get_datasets:
-            data[dataset] = load_data(name=name[:-l] + dataset, file=file)
+        DataObj = FileData.ExtractFileData(file=file, path=name,\
+                                           filter_obj=filter_obj,\
+                                           ncomps=NComps)
 
 
         # perform PCA on 'swell_sqiso' data
-        pca = PCA(n_components=2)                       # define PCA object
-        pca.fit(data['swell_sqiso'])                    # fit PCA object to 
+        pca = PCA(n_components=DataObj.ncomps)          # set PCA object
+        pca.fit(FileObj.S)                              # fit PCA object to 
                                                         # data
-        components = pca.components_                    # get principle 
+        DataObj.comps = pca.components_                 # get principle 
                                                         # components
-        transf = pca.transform(data['swell_sqiso'])     # transform data to
+        transf = pca.transform(DataObj.S)               # transform data to
                                                         # principle components
 
         
         # calculate reconstraction error of PCA via root-mean-square method
-        recon = np.matmul(transf, components)\
-                + np.mean(data['swell_sqiso'], axis=0)
-        recon_er = np.sqrt(np.mean((data['swell_sqiso'] - recon)**2))
+        DataObj.reconS = np.matmul(transf, DataObj.comps)\
+                         + np.mean(DataObj.S, axis=0)
+        DataObj.mre = np.sqrt(np.mean((DataObj.S - DataObj.reconS)**2))
+        DataObj.re = np.sqrt(np.mean((DataObj.S - DataObj.reconS)**2, axis=0))
 
 
         # plot principle components in q-space
@@ -199,7 +260,7 @@ def save_plot(fig:plt.Figure, name:str, filter_obj:str, eva_path:str,\
         os.makedirs(path)
     
     # save figure as .png
-    fig.savefig(path + seperator + name[:-l].replace('/', '&') + '.png')
+    fig.savefig(path + seperator + name + '.png')
     plt.pause(0.1)                                  # pause for 0.1 seconds
     plt.close()                                     # close figure
 
@@ -249,44 +310,3 @@ def plot_princ_comps(data:dict, components:np.ndarray, name:str,\
     save_plot(fig=fig, name=name, filter_obj=filter_obj,\
               eva_path=eva_path, eva_aspect='PCA_comp_plot',\
               system=system)
-    
-
-class FileData:
-    '''
-    Class to store and update results for comprehensive file evaluation after 
-    individual file evaluation.
-    '''
-    # define contructor
-    def __init__(self, NChain:int, InterconDens:int, qKey:np.ndarray,\
-                 SData:np.ndarray, components:np.ndarray, ExplVar:np.ndarray,\
-                 ExplVarRatio:np.ndarray, ReconSData:np.ndarray):
-        self.length = NChain
-        self.f = InterconDens
-        self.q = qKey
-        self.S = SData
-        self.comps = components
-        self.var = ExplVar
-        self.varratio = ExplVarRatio
-        self.reconS = ReconSData
-        self.mre = np.sqrt(np.mean((self.reconS - self.S)**2))
-        self.re = np.sqrt(np.mean((self.reconS - self.S)**2, axis=0))
-
-    @staticmethod
-    def ExtractFileData(file:h5py.File, path:str, filter_obj:str, ncomps:int):
-
-        l = len(filter_obj)         # length of filter_object
-
-        if 'N_40' in path:
-            NChain = 40
-        elif 'N_100' in path:
-            NChain = 100
-        elif 'N_200' in path:
-            NChain = 200
-
-        # get 'swell_sqiso_key' group and reshape it from (m, 1) to (m)
-        qKey = np.squeeze(file[path])
-
-        # get 'swell_sqiso' group and reshape it from (m, n, 1) to (m, n)
-        SData = np.squeeze(file[path[:-l]+'swell_sqiso'])
-
-        return FileData(NChain=NChain, InterconDens=, qKey=qKey, SData=SData, components=, ExplVar=, ExplVarRatio=, ReconSData=)
