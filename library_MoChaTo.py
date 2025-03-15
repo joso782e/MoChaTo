@@ -140,6 +140,10 @@ def filter_func(name:str, file:h5py.File, NComps:int, DataObjs:list,\
 
         # plot principle components in q-space
         plot_princ_comps(DataObj=DataObj, eva_path=eva_path,  system=system)
+
+
+        # plot reconstruction error in q-space
+        plot_recon_error(DataObj=DataObj, eva_path:eva_path, system:system)
         
 
         # plot result of PCA on 'swell_sqiso' data (structurial factor),
@@ -288,13 +292,21 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
     qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
     qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
     Smin = 1.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                        DataObj.comps[1,:]*DataObj.q**2])\
+                        DataObj.S[50,:]*DataObj.q**2,\
+                        DataObj.S[350,:]*DataObj.q**2,\
+                        DataObj.re*DataObj.q**2])\
             - 0.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                            DataObj.comps[1,:]*DataObj.q**2])
+                           DataObj.S[50,:]*DataObj.q**2,\
+                           DataObj.S[350,:]*DataObj.q**2,\
+                           DataObj.re*DataObj.q**2])
     Smax = 1.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                        DataObj.comps[1,:]*DataObj.q**2])\
+                        DataObj.S[50,:]*DataObj.q**2,\
+                        DataObj.S[350,:]*DataObj.q**2,\
+                        DataObj.re*DataObj.q**2])\
             - 0.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                            DataObj.comps[1,:]*DataObj.q**2])
+                           DataObj.comps[50,:]*DataObj.q**2,\
+                           DataObj.S[350,:]*DataObj.q**2,\
+                           DataObj.re*DataObj.q**2])
     
     # plot result of PCA on 'swell_sqiso' data (structurial factor),
     # component 1 and 2 dependend on 'swell_sqiso_key'
@@ -302,14 +314,18 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
     ax = fig.add_subplot(1, 1, 1)               # add subplot
     ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
-    ax.set_title(r'Principle components dependend on $q$')
+    ax.set_title(r'Reconstruction error in $q$-space')
     ax.set_xlabel(r'$q$')
-    ax.set_ylabel(r'$S_1(q)q^2$')
+    ax.set_ylabel(r'$S(q)q^2$')
 
-    ax.plot(DataObj.q, DataObj.comps[0,:]*DataObj.q**2, lw=1.0,\
-            color='blue', label='Component 1')
-    ax.plot(DataObj.q, DataObj.comps[1,:]*DataObj.q**2, lw=1.0,\
-            color='red', label='Component 2')
+    ax.plot(DataObj.q, DataObj.S[50,:]*DataObj.q**2, lw=1.0, color='blue',\
+            label='example curve')
+    ax.plot(DataObj.q, DataObj.S[350,:]*DataObj.q**2, lw=1.0, color='blue',\
+            label='example curve')
+    ax.plot(DataObj.q, np.mean(DataObj.S, axis=0)*DataObj.q**2, lw=1.0,\
+            color='black', label='mean curve')
+    ax.plot(DataObj.q, Data.re*Data.q**2, lw=1.0, color='red',\
+            label='Reconstruction error in $q$-space')
     
     ax.legend(loc='upper right')
 
@@ -323,14 +339,14 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
 
     # define path to safe plot depending on chain length
     if DataObj.f == 40:
-        path = eva_path + seperator +'plots'  + seperator + 'PCA_comp_plot'\
-               + seperator + 'N_40'
+        path = eva_path + seperator +'plots'  + seperator\
+               + 'Recon_error_in_qspace' + seperator + 'N_40'
     elif DataObj.f == 100:
-        path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
-               + seperator + 'N_100'
+        path = eva_path + seperator +'plots' + seperator\
+               + 'Recon_error_in_qspace' + seperator + 'N_100'
     elif DataObj.f == 200:
-        path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
-               + seperator + 'N_200'
+        path = eva_path + seperator +'plots' + seperator\
+               + 'Recon_error_in_qspace' + seperator + 'N_200'
 
     # save and close figure
     save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
