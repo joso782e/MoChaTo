@@ -227,7 +227,6 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
     Function to make script more clear. It contains all lines regarding
     the plot of the principle components.
     '''
-
     # important parameters for plotting principle components
     qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
     qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
@@ -238,6 +237,63 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
     Smax = 1.05*np.max([DataObj.comps[0,:]*DataObj.q**2,\
                         DataObj.comps[1,:]*DataObj.q**2])\
             - 0.05*np.min([DataObj.comps[0,:]*DataObj.q**2,\
+                            DataObj.comps[1,:]*DataObj.q**2])
+    
+    # plot result of PCA on 'swell_sqiso' data (structurial factor),
+    # component 1 and 2 dependend on 'swell_sqiso_key'
+    fig = plt.figure(figsize=(8, 6))            # create figure
+    ax = fig.add_subplot(1, 1, 1)               # add subplot
+    ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
+
+    ax.set_title(r'Principle components dependend on $q$')
+    ax.set_xlabel(r'$q$')
+    ax.set_ylabel(r'$S_1(q)q^2$')
+
+    ax.plot(DataObj.q, DataObj.comps[0,:]*DataObj.q**2, lw=1.0,\
+            color='blue', label='Component 1')
+    ax.plot(DataObj.q, DataObj.comps[1,:]*DataObj.q**2, lw=1.0,\
+            color='red', label='Component 2')
+    
+    ax.legend(loc='upper right')
+
+
+    if system == 'windows':
+        seperator = '\\'                    # define seperator for windows 
+                                            # operating system
+    elif system == 'linux':
+        seperator = '/'                     # define seperator for linux
+                                            # operating system
+
+    # define path to safe plot depending on chain length
+    if DataObj.f == 40:
+        path = eva_path + seperator +'plots'  + seperator + 'PCA_comp_plot'\
+               + seperator + 'N_40'
+    elif DataObj.f == 100:
+        path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
+               + seperator + 'N_100'
+    elif DataObj.f == 200:
+        path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
+               + seperator + 'N_200'
+
+    # save and close figure
+    save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
+
+
+def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
+    '''
+    Function to make script more clear. It contains all lines regarding
+    the plot of the principle components.
+    '''
+    # important parameters for plotting reconstruction error, mean curve and 
+    qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
+    qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
+    Smin = 1.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
+                        DataObj.comps[1,:]*DataObj.q**2])\
+            - 0.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
+                            DataObj.comps[1,:]*DataObj.q**2])
+    Smax = 1.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
+                        DataObj.comps[1,:]*DataObj.q**2])\
+            - 0.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
                             DataObj.comps[1,:]*DataObj.q**2])
     
     # plot result of PCA on 'swell_sqiso' data (structurial factor),
