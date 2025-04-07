@@ -143,12 +143,12 @@ def filter_func(name:str, file:h5py.File, NComps:int, DataObjs:list,\
 
 
         # plot reconstruction error in q-space
-        plot_recon_error(DataObj=DataObj, eva_path:eva_path, system:system)
+        plot_recon_error(DataObj=DataObj, eva_path=eva_path, system=system)
         
 
         # plot result of PCA on 'swell_sqiso' data (structurial factor),
         # component 1 vs. component 2 of transformed data
-        fig = plt.figure(figsize=(5, 3))                # create figure
+        fig = plt.figure(figsize=(6, 4))                # create figure
         ax = fig.add_subplot(1, 1, 1)                   # add subplot
 
         ax.set_title(r'2D scatter plot of PCA-transformed data')
@@ -245,7 +245,7 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
     
     # plot result of PCA on 'swell_sqiso' data (structurial factor),
     # component 1 and 2 dependend on 'swell_sqiso_key'
-    fig = plt.figure(figsize=(8, 6))            # create figure
+    fig = plt.figure(figsize=(6, 4))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
     ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
@@ -286,9 +286,11 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
 def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
     '''
     Function to make script more clear. It contains all lines regarding
-    the plot of the principle components.
+    the plot of the reconstruction error, mean curves and example curves in
+    q-space.
     '''
-    # important parameters for plotting reconstruction error, mean curve and 
+    # important parameters for plotting reconstruction error, mean curve and
+    # example curves in q-space
     qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
     qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
     Smin = 1.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
@@ -324,7 +326,7 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
             label='example curve')
     ax.plot(DataObj.q, np.mean(DataObj.S, axis=0)*DataObj.q**2, lw=1.0,\
             color='black', label='mean curve')
-    ax.plot(DataObj.q, Data.re*Data.q**2, lw=1.0, color='red',\
+    ax.plot(DataObj.q, DataObj.re*DataObj.q**2, lw=1.0, color='red',\
             label='Reconstruction error in $q$-space')
     
     ax.legend(loc='upper right')

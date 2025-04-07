@@ -7,8 +7,7 @@ topology of monochain molecules
 written by Jonas Soucek, 2025
 at TU Dresden and Leibniz Institute of Polymer Research
 
-This script it used to get and evaluate simulated data from an .hdf5 file. 
-
+This script it used to get and evaluate simulated data from an .hdf5 file.
 '''
 
 import os
@@ -60,6 +59,9 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
             eva_path=eva_path, system=system, TestRun=False))
         
 
+print(len(DataObjs))
+        
+
 if system == 'windows':
     seperator = '\\'                    # define seperator for windows 
                                         # operating system
@@ -69,7 +71,7 @@ elif system == 'linux':
                                         
 
 # plot mean reconstruction error depending on interconnection error
-fn40 = [obj.f for obj in DataObjs if obj.length == 40]
+'''fn40 = [obj.f for obj in DataObjs if obj.length == 40]
 fn100 = [obj.f for obj in DataObjs if obj.length == 100]
 fn200 = [obj.f for obj in DataObjs if obj.length == 200]
 
@@ -89,7 +91,7 @@ ax.plot(1/np.array(fn100), ren100, lw=1.0, color='red', label=r'$n=100$')
 ax.plot(1/np.array(fn200), ren200, lw=1.0, color='green', label=r'$n=200$')
 
 lib.save_plot(fig=fig, name='mean_recon_error',\
-              path=eva_path+seperator+'plots', system=system)
+              path=eva_path+seperator+'plots', system=system)'''
 
 
 print('Evaluation finished')
