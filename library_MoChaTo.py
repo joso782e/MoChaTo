@@ -17,6 +17,9 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 
+print("library_MoChaTo.py imported successfully")
+
+
 class FileData:
     '''
     Class to store and update results for comprehensive file evaluation after 
@@ -84,8 +87,8 @@ class FileData:
                         qKey=qKey, SData=SData, NComps=ncomps)
 
 
-def filter_func(name:str, file:h5py.File, NComps:int, DataObjs:list,\
-                filter_obj:str, eva_path:str, system:str, TestRun:bool=False)\
+def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
+                eva_path:str, system:str, TestRun:bool=False)\
     -> None:
     '''
     Function to filter data groups in .hdf5 'input_file' that contain the
@@ -114,6 +117,16 @@ def filter_func(name:str, file:h5py.File, NComps:int, DataObjs:list,\
     if filter_obj in name:
         # print name in terminal for debugging
         print(f'{name}')
+
+
+        # define seperator for file handling depending on operating system
+        if system == 'windows':
+            seperator = '\\'                    # define seperator for windows
+                                                # operating system
+        elif system == 'linux':
+            seperator = '/'                     # define seperator for linux
+                                                # operating system
+
 
         DataObj = FileData.ExtractFileData(file=file, path=name,\
                                            filter_obj=filter_obj,\
@@ -144,6 +157,10 @@ def filter_func(name:str, file:h5py.File, NComps:int, DataObjs:list,\
 
         # plot reconstruction error in q-space
         plot_recon_error(DataObj=DataObj, eva_path=eva_path, system=system)
+
+
+        # plot example curves in q-space
+        plot_example_curves(DataObj=DataObj, eva_path=eva_path, system=system)
         
 
         # plot result of PCA on 'swell_sqiso' data (structurial factor),
@@ -157,18 +174,13 @@ def filter_func(name:str, file:h5py.File, NComps:int, DataObjs:list,\
 
         ax.scatter(transf[:,0], transf[:,1], s=0.5, c='blue')
 
-        # save and close figure
-        save_plot(fig=fig, name=name, filter_obj=filter_obj,\
-                  eva_path=eva_path, eva_aspect='comp1_comp2_transf_data',\
-                  system=system)
+        # define path to safe plot
+        path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
+               + seperator + f'N_{DataObj.length}'
 
-        
-        if system == 'windows':
-            seperator = '\\'                    # define seperator for windows
-                                                # operating system
-        elif system == 'linux':
-            seperator = '/'                     # define seperator for linux
-                                                # operating system
+        # save and close figure
+        save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
+
 
         # print and save results in seperate .txt file
         with open(eva_path + seperator + 'results.txt', 'a') as res_file:
@@ -182,13 +194,16 @@ def filter_func(name:str, file:h5py.File, NComps:int, DataObjs:list,\
             res_file.write('-'*79 + '\n\n')
 
         # print separator line to indicate end of one condition evaluation in 
-        # terminal during debugging
-        # print('-'*79)
+        # terminal for debugging
+        print('-'*79)
         
-        DataObjs.append(DataObj)
 
         if TestRun:
             sys.exit()          # exit script if TestRun flag is set to True
+        
+        return DataObj
+    else:
+        return None
 
     
 def save_plot(fig:plt.Figure, name:str, path:str, system:str,\
@@ -268,16 +283,66 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
         seperator = '/'                     # define seperator for linux
                                             # operating system
 
-    # define path to safe plot depending on chain length
-    if DataObj.f == 40:
-        path = eva_path + seperator +'plots'  + seperator + 'PCA_comp_plot'\
-               + seperator + 'N_40'
-    elif DataObj.f == 100:
-        path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
-               + seperator + 'N_100'
-    elif DataObj.f == 200:
-        path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
-               + seperator + 'N_200'
+    # define path to safe plot
+    path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
+           + seperator + f'N_{DataObj.length}'
+
+    # save and close figure
+    save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
+
+
+def plot_example_curves(DataObj:FileData, eva_path:str, system:str) -> None:
+    '''
+    Function to make script more clear. It contains all lines regarding
+    the plot of the example curves in q-space.
+    '''
+    # important parameters for plotting example curves in q-space
+    qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
+    qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
+    Smin = 1.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
+                        DataObj.S[50,:]*DataObj.q**2,\
+                        DataObj.S[350,:]*DataObj.q**2])\
+           - 0.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
+                           DataObj.S[50,:]*DataObj.q**2,\
+                           DataObj.S[350,:]*DataObj.q**2])
+    Smax = 1.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
+                        DataObj.S[50,:]*DataObj.q**2,\
+                        DataObj.S[350,:]*DataObj.q**2])\
+           - 0.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
+                           DataObj.S[50,:]*DataObj.q**2,\
+                           DataObj.S[350,:]*DataObj.q**2])
+    
+    # plot result of PCA on 'swell_sqiso' data (structurial factor),
+    # component 1 and 2 dependend on 'swell_sqiso_key'
+    fig = plt.figure(figsize=(8, 6))            # create figure
+    ax = fig.add_subplot(1, 1, 1)               # add subplot
+    ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
+
+    ax.set_title(r'Structural factor in $q$-space')
+    ax.set_xlabel(r'$q$')
+    ax.set_ylabel(r'$S(q)q^2$')
+
+    ax.plot(DataObj.q, DataObj.S[50,:]*DataObj.q**2, lw=1.0,\
+            color='skyblue', label='example curve 1')
+    ax.plot(DataObj.q, DataObj.S[350,:]*DataObj.q**2, lw=1.0,\
+            color='lightskyblue', label='example curve 2')
+    ax.plot(DataObj.q, np.mean(DataObj.S, axis=0)*DataObj.q**2, lw=1.0,\
+            color='black', label='mean curve')
+    
+    ax.set_yscale('log')                    # set y-axis to logarithmic scale
+    ax.legend(loc='upper right')            # set legend position
+
+
+    if system == 'windows':
+        seperator = '\\'                    # define seperator for windows 
+                                            # operating system
+    elif system == 'linux':
+        seperator = '/'                     # define seperator for linux
+                                            # operating system
+
+    # define path to safe plot
+    path = eva_path + seperator +'plots' + seperator\
+           + 'example_curves' + seperator + f'N_{DataObj.length}'
 
     # save and close figure
     save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
@@ -293,22 +358,10 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
     # example curves in q-space
     qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
     qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
-    Smin = 1.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                        DataObj.S[50,:]*DataObj.q**2,\
-                        DataObj.S[350,:]*DataObj.q**2,\
-                        DataObj.re*DataObj.q**2])\
-            - 0.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                           DataObj.S[50,:]*DataObj.q**2,\
-                           DataObj.S[350,:]*DataObj.q**2,\
-                           DataObj.re*DataObj.q**2])
-    Smax = 1.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                        DataObj.S[50,:]*DataObj.q**2,\
-                        DataObj.S[350,:]*DataObj.q**2,\
-                        DataObj.re*DataObj.q**2])\
-            - 0.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                           DataObj.comps[50,:]*DataObj.q**2,\
-                           DataObj.S[350,:]*DataObj.q**2,\
-                           DataObj.re*DataObj.q**2])
+    Smin = 1.05*np.min([DataObj.re*DataObj.q**2])\
+           - 0.05*np.max([DataObj.re*DataObj.q**2])
+    Smax = 1.05*np.max([DataObj.re*DataObj.q**2])\
+           - 0.05*np.min([DataObj.re*DataObj.q**2])
     
     # plot result of PCA on 'swell_sqiso' data (structurial factor),
     # component 1 and 2 dependend on 'swell_sqiso_key'
@@ -320,12 +373,7 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
     ax.set_xlabel(r'$q$')
     ax.set_ylabel(r'$S(q)q^2$')
 
-    ax.plot(DataObj.q, DataObj.S[50,:]*DataObj.q**2, lw=1.0, color='blue',\
-            label='example curve')
-    ax.plot(DataObj.q, DataObj.S[350,:]*DataObj.q**2, lw=1.0, color='blue',\
-            label='example curve')
-    ax.plot(DataObj.q, np.mean(DataObj.S, axis=0)*DataObj.q**2, lw=1.0,\
-            color='black', label='mean curve')
+    
     ax.plot(DataObj.q, DataObj.re*DataObj.q**2, lw=1.0, color='red',\
             label='Reconstruction error in $q$-space')
     
@@ -339,16 +387,9 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
         seperator = '/'                     # define seperator for linux
                                             # operating system
 
-    # define path to safe plot depending on chain length
-    if DataObj.f == 40:
-        path = eva_path + seperator +'plots'  + seperator\
-               + 'Recon_error_in_qspace' + seperator + 'N_40'
-    elif DataObj.f == 100:
-        path = eva_path + seperator +'plots' + seperator\
-               + 'Recon_error_in_qspace' + seperator + 'N_100'
-    elif DataObj.f == 200:
-        path = eva_path + seperator +'plots' + seperator\
-               + 'Recon_error_in_qspace' + seperator + 'N_200'
+    # define path to safe plot
+    path = eva_path + seperator +'plots' + seperator\
+           + 'Recon_error_in_qspace' + seperator + f'N_{DataObj.length}'
 
     # save and close figure
     save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
