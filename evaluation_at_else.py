@@ -2,12 +2,13 @@
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------------------
 MoChaTo: Evaluation script for "Pattern in neutron scattering data and the 
-topology of monochain molecules
+topology of monochain molecules"
 -------------------------------------------------------------------------------
 written by Jonas Soucek, 2025
 at TU Dresden and Leibniz Institute of Polymer Research
 
-This script it used to get and evaluate simulated data from an .hdf5 file.
+This script it used to get and evaluate simulated data from an .hdf5 file. It
+is part of a bachelor thesis in physics.
 '''
 
 import os
@@ -45,7 +46,7 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         res_file.write('containing a simulation of 500 monochain molecules\n')
         res_file.write('and thier resulting structural factor regarding')
         res_file.write('neutron scattering. It contains some information on\n')
-        res_file.write('the operaing system and hardware as well as')
+        res_file.write('the operaiting system and hardware as well as')
         res_file.write('signifficant quantities for further evaluation.\n\n')
 
         res_file.write(f'Number of PCA components: 2\n\n')
