@@ -17,7 +17,8 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 
-print("library_MoChaTo.py imported successfully")
+# print import statement wether the module has been imported successfully
+print("Module \"library_MoChaTo.py\" imported successfully")
 
 
 class FileData:
