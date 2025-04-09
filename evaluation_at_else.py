@@ -22,17 +22,27 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-root_dir = r'C:\Users\jonas\OneDrive\TU Dresden\Physik-Studium, Bachelor\Abschlussarbeit'
-search_crit = r'\**\*.hdf5'
-
 NComps = 2                      # number of principle components to perform
                                 # PCA with
 
 system = 'windows'              # clearify operating systsem for file handling
+if system == 'windows':
+    seperator = '\\'            # define seperator for windows 
+                                # operating system
+elif system == 'linux':
+    seperator = '/'             # define seperator for linux
+                                # operating system
+
+
+# root directory of the project
+root_dir = '.'
+# search criteria for .hdf5 files
+search_crit = root_dir + '\\**\\*.hdf5'.replace('\\', seperator)
+
 
 filter_obj = 'swell_sqiso_key'
 datagroups = [filter_obj, 'swell_sqiso']
-eva_path = r'C:\Users\jonas\OneDrive\TU Dresden\Physik-Studium, Bachelor\Abschlussarbeit\script_evaluation'
+eva_path = root_dir + '\\script_evaluation'.replace('\\', seperator)
 
 
 for path in glob.glob(root_dir+search_crit, recursive=True):
@@ -64,14 +74,6 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         
 
     print(len(DataObjs))
-            
-
-    if system == 'windows':
-        seperator = '\\'                    # define seperator for windows 
-                                            # operating system
-    elif system == 'linux':
-        seperator = '/'                     # define seperator for linux
-                                            # operating system
                                             
 
     # plot mean reconstruction error depending on interconnection error
@@ -83,16 +85,19 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     ren100 = [obj.mre for obj in DataObjs if obj.length == 100]
     ren200 = [obj.mre for obj in DataObjs if obj.length == 200]
 
-    fig = plt.figure(figsize=(5, 3))                # create figure
+    fig = plt.figure(figsize=(8, 6))                # create figure
     ax = fig.add_subplot(1, 1, 1)                   # add subplot
 
-    ax.set_title(r'Mean reconstruction error depending on interconnection density')
+    ax.set_title(r'Relative mean reconstruction error depending on interconnection density')
     ax.set_xlabel(r'1/f')
-    ax.set_ylabel(r'mean reconstruction error')
+    ax.set_ylabel(r'$\langle e_S\rangle$')
 
-    ax.plot(1/np.array(fn40), ren40, lw=1.0, color='blue', label=r'$n=40$')
-    ax.plot(1/np.array(fn100), ren100, lw=1.0, color='red', label=r'$n=100$')
-    ax.plot(1/np.array(fn200), ren200, lw=1.0, color='green', label=r'$n=200$')
+    ax.scatter(fn40, ren40, ms=1.0, color='blue', label=r'$n=40$')
+    ax.scatter(fn100, ren100, ms=1.0, color='red', label=r'$n=100$')
+    ax.scatter(fn200, ren200, ms=1.0, color='green', label=r'$n=200$')
+
+    ax.legend(loc='upper right')            # set legend position
+
 
     lib.save_plot(fig=fig, name='mean_recon_error',\
                 path=eva_path+seperator+'plots', system=system)
