@@ -17,7 +17,7 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 
-# print import statement wether the module has been imported successfully
+# print import statement if the module has been imported successfully
 print("Module \"library_MoChaTo.py\" imported successfully")
 
 
@@ -29,21 +29,26 @@ class FileData:
     # define contructor
     def __init__(self, Cond:str, NChain:int, InterconDens:int,\
                  qKey:np.ndarray, SData:np.ndarray, NComps:int):
-        self.condi = Cond               # string describing simulated condition
-        self.length = NChain            # chainlength in number of spheres
-        self.f = InterconDens           # connector distance
-        self.q = qKey                   # values in q-space
-        self.S = SData                  # structural factor in q-space
-        self.ncomps = NComps            # number of principle components
-        self.reconS = None              # reconstructed data from PCA
-        self.comps = None               # principle components, sorted via
-                                        # explained variance
-        self.var = None                 # explained variance, sorted from
-                                        # highets to lowest
-        self.varratio = None            # percentage of explained variance
-        self.mre = None                 # relative mean reconstraction error
-        self.re = None                  # relative reconstruction error in 
-                                        # q-space
+        self.condi = Cond                   # string describing simulated
+                                            # condition
+        self.length = NChain                # chainlength in number of spheres
+        self.f = InterconDens               # connector distance
+        self.q = qKey                       # values in q-space
+        self.S = SData                      # structural factor in q-space
+        self.rmsS = np.mean(SData, axis=0)  # root-mean-square of structural
+                                            # factor in q-space
+        self.ncomps = NComps                # number of principle components
+        self.PCspaceS = None                # structural factor in PC-space
+        self.reconS = None                  # reconstructed data from PCA
+        self.comps = None                   # principle components, sorted via
+                                            # explained variance
+        self.var = None                     # explained variance, sorted from
+                                            # highets to lowest
+        self.varratio = None                # percentage of explained variance
+        self.mre = None                     # relative mean reconstraction
+                                            # error
+        self.re = None                      # relative reconstruction error in 
+                                            # q-space
 
     @staticmethod
     def ExtractFileData(file:h5py.File, path:str, filter_obj:str, ncomps:int):
@@ -136,27 +141,34 @@ def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
 
 
         # perform PCA on 'swell_sqiso' data
-        pca = PCA(n_components=DataObj.ncomps)              # set PCA object
-        pca.fit(DataObj.S)                                  # fit PCA object
-                                                            # to data
-        DataObj.comps = pca.components_                     # get principle 
-                                                            # components
-        DataObj.varratio = pca.explained_variance_ratio_    # get explained
-                                                            # variance ratio
-        transf = pca.transform(DataObj.S)                   # transform data to
+        # create PCA object
+        pca = PCA(n_components=DataObj.ncomps)
+        # fit PCA object to data
+        pca.fit(DataObj.S)
+        # get principle components
+        DataObj.comps = pca.components_
+        # get explained variance ratio
+        DataObj.varratio = pca.explained_variance_ratio_
+        # transform data to principel component space
+        DataObj.PCspaceS = pca.transform(DataObj.S)
 
         
         # calculate reconstraction error of PCA via root-mean-square method
-        DataObj.reconS = np.matmul(transf, DataObj.comps)\
-                         + np.mean(DataObj.S, axis=0)
+        # can i calculate that in the class? (ask Marco)
+        DataObj.reconS = np.matmul(DataObj.PCspaceS, DataObj.comps)\
+                         + DataObj.rmsS
         DataObj.mre = np.sqrt(np.mean((DataObj.S - DataObj.reconS)**2))\
-                      /np.mean(np.abs(DataObj.S))
+                      /np.mean(DataObj.rmsS)
         DataObj.re = np.sqrt(np.mean((DataObj.S - DataObj.reconS)**2, axis=0))\
-                     /np.mean(np.abs(DataObj.S), axis=0)
+                     /DataObj.rmsS
 
 
         # plot principle components in q-space
         plot_princ_comps(DataObj=DataObj, eva_path=eva_path,  system=system)
+
+
+        # plot structural factor in PC-space
+        plot_data_PCspace(DataObj=DataObj, eva_path=eva_path, system=system)
 
 
         # plot reconstruction error in q-space
@@ -167,32 +179,14 @@ def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
         plot_example_curves(DataObj=DataObj, eva_path=eva_path, system=system)
 
 
-        # plot recnstructed curves in q-space
+        # plot reconstructed curves in q-space
         plot_recon_curves(DataObj=DataObj, eva_path=eva_path, system=system)
-
-
-        # plot result of PCA on 'swell_sqiso' data (structurial factor),
-        # component 1 vs. component 2 of transformed data
-        fig = plt.figure(figsize=(6, 4))                # create figure
-        ax = fig.add_subplot(1, 1, 1)                   # add subplot
-
-        ax.set_title(r'2D scatter plot of PCA-transformed data')
-        ax.set_xlabel(r'Component 1')
-        ax.set_ylabel(r'Component 2')
-
-        ax.scatter(transf[:,0], transf[:,1], s=0.5, c='blue')
-
-        # define path to safe plot
-        path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
-               + seperator + f'N_{DataObj.length}'
-
-        # save and close figure
-        save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
 
 
         # print and save results in seperate .txt file
         with open(eva_path + seperator + 'results.txt', 'a') as res_file:
-            res_file.write(f'{DataObj.condi}\n')
+            res_file.write(f'chain length: {DataObj.length}\n')
+            res_file.write(f'Interconnection density: {DataObj.f}\n')
             res_file.write('Relative mean reconstruction error:\n')
             res_file.write(f'{round(DataObj.mre,6)}\n')
             res_file.write(f'Variance ratio explained by component 1:\n')
@@ -208,6 +202,7 @@ def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
 
         if TestRun:
             sys.exit()          # exit script if TestRun flag is set to True
+
         
         return DataObj
     else:
@@ -254,32 +249,36 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
     Function to make script more clear. It contains all lines regarding
     the plot of the principle components.
     '''
-    # important parameters for plotting principle components
+    # calculate mean of coordinates in principal component space
+    rms_c1 = np.mean(DataObj.PCspaceS[:,0])
+    rms_c2 = np.mean(DataObj.PCspaceS[:,1])
+
+    # important parameters for plotting principle components in q-space
     qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
     qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
-    Smin = 1.05*np.min([DataObj.comps[0,:]*DataObj.q**2,\
-                        DataObj.comps[1,:]*DataObj.q**2])\
-            - 0.05*np.max([DataObj.comps[0,:]*DataObj.q**2,\
-                            DataObj.comps[1,:]*DataObj.q**2])
-    Smax = 1.05*np.max([DataObj.comps[0,:]*DataObj.q**2,\
-                        DataObj.comps[1,:]*DataObj.q**2])\
-            - 0.05*np.min([DataObj.comps[0,:]*DataObj.q**2,\
-                            DataObj.comps[1,:]*DataObj.q**2])
+    Smin = 1.05*np.min([rms_c1*DataObj.comps[0,:]*DataObj.q**2,\
+                        rms_c2*DataObj.comps[1,:]*DataObj.q**2])\
+            - 0.05*np.max([rms_c1*DataObj.comps[0,:]*DataObj.q**2,\
+                            rms_c2*DataObj.comps[1,:]*DataObj.q**2])
+    Smax = 1.05*np.max([rms_c1*DataObj.comps[0,:]*DataObj.q**2,\
+                        rms_c2*DataObj.comps[1,:]*DataObj.q**2])\
+            - 0.05*np.min([rms_c1*DataObj.comps[0,:]*DataObj.q**2,\
+                           rms_c2*DataObj.comps[1,:]*DataObj.q**2])
     
-    # plot result of PCA on 'swell_sqiso' data (structurial factor),
-    # component 1 and 2 dependend on 'swell_sqiso_key'
+    
+    # plot principle components in q-space
     fig = plt.figure(figsize=(6, 4))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
     ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
-    ax.set_title(r'Principle components dependend on $q$')
+    ax.set_title(r'Scaled principle components in $q$-space')
     ax.set_xlabel(r'$q$')
     ax.set_ylabel(r'$S_1(q)q^2$')
 
-    ax.plot(DataObj.q, DataObj.comps[0,:]*DataObj.q**2, lw=1.0,\
-            color='blue', label='Component 1')
-    ax.plot(DataObj.q, DataObj.comps[1,:]*DataObj.q**2, lw=1.0,\
-            color='red', label='Component 2')
+    ax.plot(DataObj.q, rms_c1*DataObj.comps[0,:]*DataObj.q**2, lw=1.0,\
+            color='aqua', label='Component 1')
+    ax.plot(DataObj.q, rms_c2*DataObj.comps[1,:]*DataObj.q**2, lw=1.0,\
+            color='springgreen', label='Component 2')
     
     ax.legend(loc='upper right')
 
@@ -292,8 +291,52 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
                                             # operating system
 
     # define path to safe plot
-    path = eva_path + seperator +'plots' + seperator + 'PCA_comp_plot'\
+    path = eva_path + seperator +'plots' + seperator + 'PC_in_qspace'\
            + seperator + f'N_{DataObj.length}'
+
+    # save and close figure
+    save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
+
+
+def plot_data_PCspace(DataObj:FileData, eva_path:str, system:str) -> None:
+    '''
+    Function to make script more clear. It contains all lines regarding
+    the plot of the structural factor in PC-space.
+    '''
+    # important parameters for plotting structural factor in PC-space
+    c1min = 1.05*np.min(DataObj.PCspaceS[:,0])\
+            - 0.05*np.max(DataObj.PCspaceS[:,0])
+    c1max = 1.05*np.max(DataObj.PCspaceS[:,0])\
+            - 0.05*np.min(DataObj.PCspaceS[:,0])
+    c2min = 1.05*np.min(DataObj.PCspaceS[:,1])\
+            - 0.05*np.max(DataObj.PCspaceS[:,1])
+    c2max = 1.05*np.max(DataObj.PCspaceS[:,1])\
+            - 0.05*np.min(DataObj.PCspaceS[:,1])
+
+
+    # plot structurial factor in PC-space
+    fig = plt.figure(figsize=(6, 4))                # create figure
+    ax = fig.add_subplot(1, 1, 1)                   # add subplot
+    ax.axis([c1min, c1max, c2min, c2max])           # set axis limits
+
+    ax.set_title(r'Structural factor in PC-space')
+    ax.set_xlabel(r'Principle omponent 1')
+    ax.set_ylabel(r'Principle component 2')
+
+    ax.scatter(DataObj.PCspaceS[:,0], DataObj.PCspaceS[:,1],\
+                s=0.5, c='dodgerblue')
+    
+
+    if system == 'windows':
+        seperator = '\\'                    # define seperator for windows 
+                                            # operating system
+    elif system == 'linux':
+        seperator = '/'                     # define seperator for linux
+                                            # operating system
+
+    # define path to safe plot
+    path = eva_path + seperator +'plots' + seperator + 'transform_in_PCspace'\
+            + seperator + f'N_{DataObj.length}'
 
     # save and close figure
     save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
@@ -304,7 +347,8 @@ def plot_example_curves(DataObj:FileData, eva_path:str, system:str) -> None:
     Function to make script more clear. It contains all lines regarding
     the plot of the example curves in q-space.
     '''
-    # important parameters for plotting example curves in q-space
+    # important parameters for plotting example curves and mean curve in
+    # q-space
     qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
     qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
     Smin = 1.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
@@ -320,8 +364,8 @@ def plot_example_curves(DataObj:FileData, eva_path:str, system:str) -> None:
                            DataObj.S[50,:]*DataObj.q**2,\
                            DataObj.S[350,:]*DataObj.q**2])
     
-    # plot result of PCA on 'swell_sqiso' data (structurial factor),
-    # component 1 and 2 dependend on 'swell_sqiso_key'
+    
+    # plot example curves and mean curve in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
     ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
@@ -331,13 +375,13 @@ def plot_example_curves(DataObj:FileData, eva_path:str, system:str) -> None:
     ax.set_ylabel(r'$S(q)q^2$')
 
     ax.plot(DataObj.q, DataObj.S[50,:]*DataObj.q**2, lw=1.0,\
-            color='skyblue', label='example curve 1')
+            color='dodgerblue', label='example curve 1')
     ax.plot(DataObj.q, DataObj.S[350,:]*DataObj.q**2, lw=1.0,\
             color='lightskyblue', label='example curve 2')
-    ax.plot(DataObj.q, np.mean(DataObj.S, axis=0)*DataObj.q**2, lw=1.0,\
+    ax.plot(DataObj.q, DataObj.rmsS*DataObj.q**2, lw=1.0,\
             color='black', label='mean curve')
     
-    ax.legend(loc='upper right')            # set legend position
+    ax.legend(loc='lower right')            # set legend position
 
 
     if system == 'windows':
@@ -349,7 +393,7 @@ def plot_example_curves(DataObj:FileData, eva_path:str, system:str) -> None:
 
     # define path to safe plot
     path = eva_path + seperator +'plots' + seperator\
-           + 'example_curves' + seperator + f'N_{DataObj.length}'
+           + 'example_in_qspace' + seperator + f'N_{DataObj.length}'
 
     # save and close figure
     save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
@@ -361,17 +405,14 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
     the plot of the reconstruction error, mean curves and example curves in
     q-space.
     '''
-    # important parameters for plotting reconstruction error, mean curve and
-    # example curves in q-space
+    # important parameters for plotting reconstruction error in q-space
     qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
     qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
-    Smin = 1.05*np.min(DataObj.re)\
-           - 0.05*np.max(DataObj.re)
-    Smax = 1.05*np.max(DataObj.re)\
-           - 0.05*np.min(DataObj.re)
+    Smin = 1.05*np.min(DataObj.re) - 0.05*np.max(DataObj.re)
+    Smax = 1.05*np.max(DataObj.re) - 0.05*np.min(DataObj.re)
+
     
-    # plot result of PCA on 'swell_sqiso' data (structurial factor),
-    # component 1 and 2 dependend on 'swell_sqiso_key'
+    # plot reconstruction error in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
     ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
@@ -379,9 +420,8 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
     ax.set_title(r'Relative reconstruction error in $q$-space')
     ax.set_xlabel(r'$q$')
     ax.set_ylabel(r'$e_S$')
-
     
-    ax.plot(DataObj.q, DataObj.re, lw=1.0, color='red')
+    ax.plot(DataObj.q, DataObj.re, lw=1.0, color='tomato')
     
 
     if system == 'windows':
@@ -393,7 +433,7 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
 
     # define path to safe plot
     path = eva_path + seperator +'plots' + seperator\
-           + 'Recon_error_in_qspace' + seperator + f'N_{DataObj.length}'
+           + 'eS_in_qspace' + seperator + f'N_{DataObj.length}'
 
     # save and close figure
     save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
@@ -405,8 +445,8 @@ def plot_recon_curves(DataObj:FileData, eva_path:str, system:str) -> None:
     the plot of the reconstruction error, mean curves and example curves in
     q-space.
     '''
-    # important parameters for plotting reconstruction error, mean curve and
-    # example curves in q-space
+    # important parameters for plotting reconstructed example curves and mean
+    # curve in q-space
     qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
     qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
     Smin = 1.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
@@ -422,8 +462,8 @@ def plot_recon_curves(DataObj:FileData, eva_path:str, system:str) -> None:
                            DataObj.reconS[50,:]*DataObj.q**2,\
                            DataObj.reconS[350,:]*DataObj.q**2])
     
-    # plot result of PCA on 'swell_sqiso' data (structurial factor),
-    # component 1 and 2 dependend on 'swell_sqiso_key'
+
+    # plot reconstructed example curves and mean curve in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
     ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
@@ -431,14 +471,15 @@ def plot_recon_curves(DataObj:FileData, eva_path:str, system:str) -> None:
     ax.set_title(r'Reconstructed curves in $q$-space')
     ax.set_xlabel(r'$q$')
     ax.set_ylabel(r'$S(q)q^2$')
-
     
-    ax.plot(DataObj.q, DataObj.reconS[50,:], lw=1.0, color='skyblue',\
-            label='reconstructed example curve 1')
+    ax.plot(DataObj.q, DataObj.reconS[50,:]*DataObj.q**2, lw=1.0,\
+            color='dodgerblue', label='reconstructed example curve 1')
     ax.plot(DataObj.q, DataObj.reconS[350,:]*DataObj.q**2, lw=1.0,\
             color='lightskyblue', label='reconstructed example curve 2')
-    ax.plot(DataObj.q, np.mean(DataObj.S, axis=0)*DataObj.q**2, lw=1.0,\
+    ax.plot(DataObj.q, DataObj.rmsS*DataObj.q**2, lw=1.0,\
             color='black', label='mean curve')
+    
+    ax.legend(loc='lower right')            # set legend position
     
 
     if system == 'windows':
@@ -450,7 +491,7 @@ def plot_recon_curves(DataObj:FileData, eva_path:str, system:str) -> None:
 
     # define path to safe plot
     path = eva_path + seperator +'plots' + seperator\
-           + 'Recon_curves_in_qspace' + seperator + f'N_{DataObj.length}'
+           + 'recon_examples_in_qspace' + seperator + f'N_{DataObj.length}'
 
     # save and close figure
     save_plot(fig=fig, name=DataObj.condi, path=path, system=system)

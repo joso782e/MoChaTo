@@ -22,8 +22,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+# print statement if the script is executed
+print('-'*79)
+print('-'*79 + '\n')
+print('Executing evaluation script...')
+
+
 NComps = 2                      # number of principle components to perform
                                 # PCA with
+TestRun = False                 # set to True if only a test run is needed:
+                                # only diagramms for first condition and
+                                # inter-condition evaluation will be plotted
 
 system = 'windows'              # clearify operating systsem for file handling
 if system == 'windows':
@@ -71,30 +80,33 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
                    eva_path=eva_path, system=system, TestRun=False)))
         
     DataObjs = [obj for obj in DataObjs if obj is not None]     # remove None
-        
+                                                    
 
-    print(len(DataObjs))
-                                            
-
-    # plot mean reconstruction error depending on interconnection error
+    # get different f for each chain length
     fn40 = [obj.f for obj in DataObjs if obj.length == 40]
     fn100 = [obj.f for obj in DataObjs if obj.length == 100]
     fn200 = [obj.f for obj in DataObjs if obj.length == 200]
 
+    # get different root-mean-square reconstruction error for each chain length
     ren40 = [obj.mre for obj in DataObjs if obj.length == 40]
     ren100 = [obj.mre for obj in DataObjs if obj.length == 100]
     ren200 = [obj.mre for obj in DataObjs if obj.length == 200]
 
+
+    # plot mean reconstruction error depending on interconnection error
     fig = plt.figure(figsize=(8, 6))                # create figure
     ax = fig.add_subplot(1, 1, 1)                   # add subplot
 
     ax.set_title(r'Relative mean reconstruction error depending on interconnection density')
-    ax.set_xlabel(r'1/f')
+    ax.set_xlabel(r'f')
     ax.set_ylabel(r'$\langle e_S\rangle$')
 
-    ax.scatter(fn40, ren40, ms=1.0, color='blue', label=r'$n=40$')
-    ax.scatter(fn100, ren100, ms=1.0, color='red', label=r'$n=100$')
-    ax.scatter(fn200, ren200, ms=1.0, color='green', label=r'$n=200$')
+    ax.plot(np.sort(fn40), np.array(ren40)[np.argsort(fn40)],\
+            lw=1.0, color='dodgerblue', label=r'$n=40$')
+    ax.plot(np.sort(fn100), np.array(ren100)[np.argsort(fn100)],\
+            lw=1.0, color='tomato', label=r'$n=100$')
+    ax.plot(np.sort(fn200), np.array(ren200)[np.argsort(fn200)],\
+            lw=1.0, color='springgreen', label=r'$n=200$')
 
     ax.legend(loc='upper right')            # set legend position
 
