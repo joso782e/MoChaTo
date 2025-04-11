@@ -9,7 +9,6 @@ at TU Dresden and Leibniz Institute of Polymer Research
 
 
 import os
-import sys
 from os.path import exists
 import h5py
 import numpy as np
