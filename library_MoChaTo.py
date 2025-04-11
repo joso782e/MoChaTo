@@ -28,15 +28,17 @@ class FileData:
     '''
     # define contructor
     def __init__(self, Cond:str, NChain:int, InterconDens:int,\
-                 qKey:np.ndarray, SData:np.ndarray, NComps:int):
+                 qKey:np.ndarray, SData:np.ndarray, crosslinks:np.ndarray,\
+                 NComps:int):
         self.condi = Cond                   # string describing simulated
                                             # condition
         self.length = NChain                # chainlength in number of spheres
         self.f = InterconDens               # connector distance
         self.q = qKey                       # values in q-space
         self.S = SData                      # structural factor in q-space
-        self.rmsS = np.mean(SData, axis=0)  # root-mean-square of structural
-                                            # factor in q-space
+        self.clmat = crosslinks             # crosslink matrix
+        self.mS = np.mean(SData, axis=0)    # mean of structural factor in
+                                            # q-space
         self.ncomps = NComps                # number of principle components
         self.PCspaceS = None                # structural factor in PC-space
         self.reconS = None                  # reconstructed data from PCA
@@ -50,11 +52,13 @@ class FileData:
         self.re = None                      # relative reconstruction error in 
                                             # q-space
 
+
     @staticmethod
     def ExtractFileData(file:h5py.File, path:str, filter_obj:str, ncomps:int):
 
         l = len(filter_obj)         # length of filter_object
         Cond = path[:-l].replace('/', '&')
+
 
         if 'N_40' in path:
             NChain = 40
@@ -63,35 +67,52 @@ class FileData:
         elif 'N_200' in path:
             NChain = 200
 
-        if 'f_2' in path:
-            InterconDens = 2
-        elif 'f_3' in path:
-            InterconDens = 3
-        elif 'f_4' in path:
-            InterconDens = 4
-        elif 'f_5' in path:
-            InterconDens = 5
-        elif 'f_6' in path:
-            InterconDens = 6
-        elif 'f_7' in path:
-            InterconDens = 7
-        elif 'f_8' in path:
-            InterconDens = 8
-        elif 'f_12' in path:
-            InterconDens = 12
+        if 'f_23' in path:
+            InterconDens = 23
         elif 'f_18' in path:
             InterconDens = 18
-        elif 'f_23' in path:
-            InterconDens = 23
+        elif 'f_12' in path:
+            InterconDens = 12
+        elif 'f_8' in path:
+            InterconDens = 8
+        elif 'f_7' in path:
+            InterconDens = 7
+        elif 'f_6' in path:
+            InterconDens = 6
+        elif 'f_5' in path:
+            InterconDens = 5
+        elif 'f_4' in path:
+            InterconDens = 4
+        elif 'f_3' in path:
+            InterconDens = 3
+        elif 'f_2' in path:
+            InterconDens = 2
+        
 
-        # get 'swell_sqiso_key' group and reshape it from (m, 1) to (m)
-        qKey = np.squeeze(file[path])
+        # get 'swell_sqiso_key' group and reshape it from (m, 1) to (m) and
+        # conversion to experimental data
+        qKey = np.squeeze(file[path])/5.19
 
         # get 'swell_sqiso' group and reshape it from (m, n, 1) to (m, n)
         SData = np.squeeze(file[path[:-l]+'swell_sqiso'])
 
+        # get crosslink matrix
+        crosslinks = file[path[:-l]+'crosslinks']
+
+
         return FileData(Cond=Cond, NChain=NChain, InterconDens=InterconDens,\
-                        qKey=qKey, SData=SData, NComps=ncomps)
+                        qKey=qKey, SData=SData, crosslinks=crosslinks,\
+                        NComps=ncomps)
+    
+
+    def mll(self) -> np.ndarray:
+        '''
+        Function to calculate the mean loop length for each molecule
+        '''
+
+        mll = np.abs(self.clmat[1] - self.clmat[2])
+
+        return np.mean(mll, axis=1)
 
 
 def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
@@ -112,11 +133,11 @@ def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
     eva_path (dtype = str)...       path to save evaluation results and plots
     system (dtype = str)...         name of operating system,
                                     either 'windows' or 'linux'
-    TestRun (dtype = bool)...       flag to exit script after evaluation of
-                                    first data group
+    TestRun (dtype = bool)...       flag wether to plot data for condition
+                                    evaluation or not
 
     output variables:
-    None
+    DataObj or None
     ---------------------------------------------------------------------------
     '''
     # perform data collection, evaluation and plotting for each simulated
@@ -156,31 +177,31 @@ def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
         # calculate reconstraction error of PCA via root-mean-square method
         # can i calculate that in the class? (ask Marco)
         DataObj.reconS = np.matmul(DataObj.PCspaceS, DataObj.comps)\
-                         + DataObj.rmsS
+                         + DataObj.mS
         DataObj.mre = np.sqrt(np.mean((DataObj.S - DataObj.reconS)**2))\
-                      /np.mean(DataObj.rmsS)
+                      /np.mean(DataObj.mS)
         DataObj.re = np.sqrt(np.mean((DataObj.S - DataObj.reconS)**2, axis=0))\
-                     /DataObj.rmsS
+                     /DataObj.mS
+        
+
+        if not TestRun:
+            # plot principle components in q-space
+            plot_princ_comps(DataObj=DataObj, eva_path=eva_path,  system=system)
 
 
-        # plot principle components in q-space
-        plot_princ_comps(DataObj=DataObj, eva_path=eva_path,  system=system)
+            # plot structural factor in PC-space
+            plot_data_PCspace(DataObj=DataObj, eva_path=eva_path,\
+                              system=system)
 
 
-        # plot structural factor in PC-space
-        plot_data_PCspace(DataObj=DataObj, eva_path=eva_path, system=system)
+            # plot reconstruction error in q-space
+            plot_recon_error(DataObj=DataObj, eva_path=eva_path, system=system)
 
 
-        # plot reconstruction error in q-space
-        plot_recon_error(DataObj=DataObj, eva_path=eva_path, system=system)
-
-
-        # plot example curves in q-space
-        plot_example_curves(DataObj=DataObj, eva_path=eva_path, system=system)
-
-
-        # plot reconstructed curves in q-space
-        plot_recon_curves(DataObj=DataObj, eva_path=eva_path, system=system)
+            # plot example curves, reconstructed curves and mean curve in
+            # q-space
+            plot_data_qspace(DataObj=DataObj, eva_path=eva_path,\
+                                system=system)
 
 
         # print and save results in seperate .txt file
@@ -197,14 +218,9 @@ def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
 
         # print separator line to indicate end of one condition evaluation in 
         # terminal for debugging
-        print('-'*79)
-        
-
-        if TestRun:
-            sys.exit()          # exit script if TestRun flag is set to True
-
-        
+        print('-'*79)            
         return DataObj
+    
     else:
         return None
 
@@ -250,8 +266,8 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
     the plot of the principle components.
     '''
     # calculate mean of coordinates in principal component space
-    rms_c1 = np.mean(DataObj.PCspaceS[:,0])
-    rms_c2 = np.mean(DataObj.PCspaceS[:,1])
+    rms_c1 = np.sqrt(np.mean(DataObj.PCspaceS[:,0]**2))
+    rms_c2 = np.sqrt(np.mean(DataObj.PCspaceS[:,1]**2))
 
     # important parameters for plotting principle components in q-space
     qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
@@ -272,7 +288,7 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
     ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
     ax.set_title(r'Scaled principle components in $q$-space')
-    ax.set_xlabel(r'$q$')
+    ax.set_xlabel(r'$q$ / [Å$^{-1}$]')	
     ax.set_ylabel(r'$S_1(q)q^2$')
 
     ax.plot(DataObj.q, rms_c1*DataObj.comps[0,:]*DataObj.q**2, lw=1.0,\
@@ -342,7 +358,7 @@ def plot_data_PCspace(DataObj:FileData, eva_path:str, system:str) -> None:
     save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
 
 
-def plot_example_curves(DataObj:FileData, eva_path:str, system:str) -> None:
+def plot_data_qspace(DataObj:FileData, eva_path:str, system:str) -> None:
     '''
     Function to make script more clear. It contains all lines regarding
     the plot of the example curves in q-space.
@@ -351,35 +367,49 @@ def plot_example_curves(DataObj:FileData, eva_path:str, system:str) -> None:
     # q-space
     qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
     qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
-    Smin = 1.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
+    Smin = 1.05*np.min([DataObj.mS*DataObj.q**2,\
                         DataObj.S[50,:]*DataObj.q**2,\
-                        DataObj.S[350,:]*DataObj.q**2])\
-           - 0.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                           DataObj.S[50,:]*DataObj.q**2,\
-                           DataObj.S[350,:]*DataObj.q**2])
-    Smax = 1.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
+                        DataObj.S[350,:]*DataObj.q**2,\
+                        DataObj.reconS[50,:]*DataObj.q**2,\
+                        DataObj.reconS[350,:]*DataObj.q**2])\
+           - 0.05*np.max([DataObj.mS*DataObj.q**2,\
+                          DataObj.S[50,:]*DataObj.q**2,\
+                          DataObj.S[350,:]*DataObj.q**2,\
+                          DataObj.reconS[50,:]*DataObj.q**2,\
+                          DataObj.reconS[350,:]*DataObj.q**2])
+    Smax = 1.05*np.max([DataObj.mS*DataObj.q**2,\
                         DataObj.S[50,:]*DataObj.q**2,\
-                        DataObj.S[350,:]*DataObj.q**2])\
-           - 0.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                           DataObj.S[50,:]*DataObj.q**2,\
-                           DataObj.S[350,:]*DataObj.q**2])
+                        DataObj.S[350,:]*DataObj.q**2,\
+                        DataObj.reconS[50,:]*DataObj.q**2,\
+                        DataObj.reconS[350,:]*DataObj.q**2])\
+           - 0.05*np.min([DataObj.mS*DataObj.q**2,\
+                          DataObj.S[50,:]*DataObj.q**2,\
+                          DataObj.S[350,:]*DataObj.q**2,\
+                          DataObj.reconS[50,:]*DataObj.q**2,\
+                          DataObj.reconS[350,:]*DataObj.q**2])
     
     
     # plot example curves and mean curve in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
-    ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
+    #ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
-    ax.set_title(r'Structural factor in $q$-space')
-    ax.set_xlabel(r'$q$')
+    ax.set_title(r'Experimental, reconstructed and mean structural factor in $q$-space')
+    ax.set_xlabel(r'$q$ / [Å$^{-1}$]')
     ax.set_ylabel(r'$S(q)q^2$')
 
-    ax.plot(DataObj.q, DataObj.S[50,:]*DataObj.q**2, lw=1.0,\
-            color='dodgerblue', label='example curve 1')
-    ax.plot(DataObj.q, DataObj.S[350,:]*DataObj.q**2, lw=1.0,\
-            color='lightskyblue', label='example curve 2')
-    ax.plot(DataObj.q, DataObj.rmsS*DataObj.q**2, lw=1.0,\
-            color='black', label='mean curve')
+    ax.loglog(DataObj.q, DataObj.S[50,:]*DataObj.q**2, lw=1.0,\
+              color='dodgerblue', label='example curve 1')
+    ax.loglog(DataObj.q, DataObj.S[350,:]*DataObj.q**2, lw=1.0,\
+              color='lightskyblue', label='example curve 2')
+    ax.loglog(DataObj.q, DataObj.reconS[50,:]*DataObj.q**2, lw=1.0,\
+              ls='--', color='dodgerblue',\
+              label='reconstructed example curve 1')
+    ax.loglog(DataObj.q, DataObj.reconS[350,:]*DataObj.q**2, lw=1.0,\
+              ls='--', color='lightskyblue',\
+              label='reconstructed example curve 2')
+    ax.loglog(DataObj.q, DataObj.rmsS*DataObj.q**2, lw=1.0,\
+              color='black', label='mean curve')
     
     ax.legend(loc='lower right')            # set legend position
 
@@ -415,13 +445,13 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
     # plot reconstruction error in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
-    ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
+    #ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
     ax.set_title(r'Relative reconstruction error in $q$-space')
-    ax.set_xlabel(r'$q$')
+    ax.set_xlabel(r'$q$ / [Å$^{-1}$]')
     ax.set_ylabel(r'$e_S$')
     
-    ax.plot(DataObj.q, DataObj.re, lw=1.0, color='tomato')
+    ax.loglog(DataObj.q, DataObj.re, lw=1.0, color='tomato')
     
 
     if system == 'windows':
@@ -434,64 +464,6 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
     # define path to safe plot
     path = eva_path + seperator +'plots' + seperator\
            + 'eS_in_qspace' + seperator + f'N_{DataObj.length}'
-
-    # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
-
-
-def plot_recon_curves(DataObj:FileData, eva_path:str, system:str) -> None:
-    '''
-    Function to make script more clear. It contains all lines regarding
-    the plot of the reconstruction error, mean curves and example curves in
-    q-space.
-    '''
-    # important parameters for plotting reconstructed example curves and mean
-    # curve in q-space
-    qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
-    qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
-    Smin = 1.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                        DataObj.reconS[50,:]*DataObj.q**2,\
-                        DataObj.reconS[350,:]*DataObj.q**2])\
-           - 0.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                           DataObj.reconS[50,:]*DataObj.q**2,\
-                           DataObj.reconS[350,:]*DataObj.q**2])
-    Smax = 1.05*np.max([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                        DataObj.reconS[50,:]*DataObj.q**2,\
-                        DataObj.reconS[350,:]*DataObj.q**2])\
-           - 0.05*np.min([np.mean(DataObj.S, axis=0)*DataObj.q**2,\
-                           DataObj.reconS[50,:]*DataObj.q**2,\
-                           DataObj.reconS[350,:]*DataObj.q**2])
-    
-
-    # plot reconstructed example curves and mean curve in q-space
-    fig = plt.figure(figsize=(8, 6))            # create figure
-    ax = fig.add_subplot(1, 1, 1)               # add subplot
-    ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
-
-    ax.set_title(r'Reconstructed curves in $q$-space')
-    ax.set_xlabel(r'$q$')
-    ax.set_ylabel(r'$S(q)q^2$')
-    
-    ax.plot(DataObj.q, DataObj.reconS[50,:]*DataObj.q**2, lw=1.0,\
-            color='dodgerblue', label='reconstructed example curve 1')
-    ax.plot(DataObj.q, DataObj.reconS[350,:]*DataObj.q**2, lw=1.0,\
-            color='lightskyblue', label='reconstructed example curve 2')
-    ax.plot(DataObj.q, DataObj.rmsS*DataObj.q**2, lw=1.0,\
-            color='black', label='mean curve')
-    
-    ax.legend(loc='lower right')            # set legend position
-    
-
-    if system == 'windows':
-        seperator = '\\'                    # define seperator for windows 
-                                            # operating system
-    elif system == 'linux':
-        seperator = '/'                     # define seperator for linux
-                                            # operating system
-
-    # define path to safe plot
-    path = eva_path + seperator +'plots' + seperator\
-           + 'recon_examples_in_qspace' + seperator + f'N_{DataObj.length}'
 
     # save and close figure
     save_plot(fig=fig, name=DataObj.condi, path=path, system=system)

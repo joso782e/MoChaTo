@@ -30,7 +30,7 @@ print('Executing evaluation script...')
 
 NComps = 2                      # number of principle components to perform
                                 # PCA with
-TestRun = False                 # set to True if only a test run is needed:
+TestRun = True                  # set to True if only a test run is needed:
                                 # only diagramms for first condition and
                                 # inter-condition evaluation will be plotted
 
@@ -50,7 +50,6 @@ search_crit = root_dir + '\\**\\*.hdf5'.replace('\\', seperator)
 
 
 filter_obj = 'swell_sqiso_key'
-datagroups = [filter_obj, 'swell_sqiso']
 eva_path = root_dir + '\\script_evaluation'.replace('\\', seperator)
 
 
@@ -77,7 +76,7 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     with h5py.File(path, 'r') as file:
         file.visit(lambda x: DataObjs.append(lib.filter_func(name=x,\
                    file=file, NComps=NComps, filter_obj=filter_obj,\
-                   eva_path=eva_path, system=system, TestRun=False)))
+                   eva_path=eva_path, system=system, TestRun=TestRun)))
         
     DataObjs = [obj for obj in DataObjs if obj is not None]     # remove None
                                                     
@@ -93,26 +92,38 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     ren200 = [obj.mre for obj in DataObjs if obj.length == 200]
 
 
+    # important parameters for plotting e_S
+    fmin = 1.05*np.min([np.min(fn40), np.min(fn100), np.min(fn200)])\
+            - 0.05*np.max([np.max(fn40), np.max(fn100), np.max(fn200)])
+    fmax = 1.05*np.max([np.max(fn40), np.max(fn100), np.max(fn200)])\
+            - 0.05*np.min([np.min(fn40), np.min(fn100), np.min(fn200)])
+    remin = 1.05*np.min([np.min(ren40), np.min(ren100), np.min(ren200)])\
+            - 0.05*np.max([np.max(ren40), np.max(ren100), np.max(ren200)])
+    remax = 1.05*np.max([np.max(ren40), np.max(ren100), np.max(ren200)])\
+            - 0.05*np.min([np.min(ren40), np.min(ren100), np.min(ren200)])
+
+
     # plot mean reconstruction error depending on interconnection error
     fig = plt.figure(figsize=(8, 6))                # create figure
     ax = fig.add_subplot(1, 1, 1)                   # add subplot
+    # ax.axis([fmin, fmax, remin, remax])             # set axis limits
 
     ax.set_title(r'Relative mean reconstruction error depending on interconnection density')
     ax.set_xlabel(r'f')
     ax.set_ylabel(r'$\langle e_S\rangle$')
 
-    ax.plot(np.sort(fn40), np.array(ren40)[np.argsort(fn40)],\
-            lw=1.0, color='dodgerblue', label=r'$n=40$')
-    ax.plot(np.sort(fn100), np.array(ren100)[np.argsort(fn100)],\
-            lw=1.0, color='tomato', label=r'$n=100$')
-    ax.plot(np.sort(fn200), np.array(ren200)[np.argsort(fn200)],\
-            lw=1.0, color='springgreen', label=r'$n=200$')
+    ax.scatter(1/np.array(fn40), ren40,\
+            s=3.5, color='dodgerblue', label=r'$n=40$')
+    ax.scatter(1/np.array(fn100), ren100,\
+            s=3.5, color='tomato', label=r'$n=100$')
+    ax.scatter(1/np.array(fn200), ren200,\
+            s=3.5, color='springgreen', label=r'$n=200$')
 
     ax.legend(loc='upper right')            # set legend position
 
 
     lib.save_plot(fig=fig, name='mean_recon_error',\
-                path=eva_path+seperator+'plots', system=system)
+                  path=eva_path+seperator+'plots', system=system)
 
 
 print('Evaluation finished')
