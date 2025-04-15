@@ -104,6 +104,9 @@ class FileData:
                         NComps=ncomps)
     
 
+    def
+    
+
     def mll(self) -> np.ndarray:
         '''
         Function to calculate the mean loop length for each molecule
@@ -201,6 +204,10 @@ def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
             # q-space
             plot_data_qspace(DataObj=DataObj, eva_path=eva_path,\
                                 system=system)
+            
+
+            # plot loop length histogram
+            plot_loop_hist(DataObj=DataObj, eva_path=eva_path, system=system)
 
 
         # print and save results in seperate .txt file
@@ -466,3 +473,20 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
 
     # save and close figure
     save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
+
+
+def plot_loop_hist(DataObj:FileData, eva_path:str, system:str, bins:int)\
+    -> None:
+    '''
+    Function to make script more clear. It contains all lines regarding
+    the plot of the loop length histogram.
+    '''
+    # plot loop length histogram
+    fig = plt.figure(figsize=(8, 6))            # create figure
+    ax = fig.add_subplot(1, 1, 1)               # add subplot
+
+    ax.set_title(r'Histogram of the loop lengths')
+    ax.set_xlabel(r'monomers per loop')
+    ax.set_ylabel(r'absolut frequency')
+
+    ax.hist()
