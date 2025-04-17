@@ -323,8 +323,7 @@ def plot_data_PCspace(DataObj:FileData, eva_path:str=config['eva_path'],\
     c2max = 1.05*np.max(DataObj.PCspaceS[:,1])\
             - 0.05*np.min(DataObj.PCspaceS[:,1])
     
-    color = DataObj.mll.flatten()          # color for scatter plot
-    color = color/np.max(color)            # normalize color for scatter plot
+    color = DataObj.mll/np.max(DataObj.mll)         # color for scatter plot
 
     # plot structurial factor in PC-space
     fig = plt.figure(figsize=(6, 4))                # create figure
