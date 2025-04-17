@@ -10,9 +10,11 @@ at TU Dresden and Leibniz Institute of Polymer Research
 
 import os
 from os.path import exists
+import json
 import h5py
 import numpy as np
 from sklearn.decomposition import PCA
+from matplotlib import colormaps as cm
 import matplotlib.pyplot as plt
 
 
@@ -20,44 +22,77 @@ import matplotlib.pyplot as plt
 print("Module \"library_MoChaTo.py\" imported successfully")
 
 
-class FileData:
+with open('.\\Scripts\\config.json', 'r') as configf:
+    config = json.load(configf)
+
+
+class FileData(PCA):
     '''
     Class to store and update results for comprehensive file evaluation after 
-    individual file evaluation.
-    '''
+    individual file evaluation. It inherits from the PCA class of sklearn and contains the following attributes:
+    - condi:        string describing simulated condition
+    - length:       chainlength in number of spheres
+    - f:            connector distance
+    - q:            values in q-space
+    - S:            structural factor in q-space
+    - clmat:        crosslink matrix
+    - mS:           mean of structural factor in q-space
+    - ll:           loop length
+    - mll:          mean loop length
+    - PCspaceS:     structural factor in PC-space
+    - reconS:       reconstructed structural factor in q-space
+    - mre:          relative mean reconstruction error
+    - re:           relative reconstruction error in q-space
+    '''   
     # define contructor
-    def __init__(self, Cond:str, NChain:int, InterconDens:int,\
-                 qKey:np.ndarray, SData:np.ndarray, crosslinks:np.ndarray,\
-                 NComps:int):
-        self.condi = Cond                   # string describing simulated
-                                            # condition
-        self.length = NChain                # chainlength in number of spheres
-        self.f = InterconDens               # connector distance
-        self.q = qKey                       # values in q-space
-        self.S = SData                      # structural factor in q-space
-        self.clmat = crosslinks             # crosslink matrix
-        self.mS = np.mean(SData, axis=0)    # mean of structural factor in
-                                            # q-space
-        self.ncomps = NComps                # number of principle components
-        self.PCspaceS = None                # structural factor in PC-space
-        self.reconS = None                  # reconstructed data from PCA
-        self.comps = None                   # principle components, sorted via
-                                            # explained variance
-        self.var = None                     # explained variance, sorted from
-                                            # highets to lowest
-        self.varratio = None                # percentage of explained variance
-        self.mre = None                     # relative mean reconstraction
-                                            # error
-        self.re = None                      # relative reconstruction error in 
-                                            # q-space
-
+    def __init__(
+        self,
+        condi:str,
+        length:int,
+        f:int,
+        q:np.ndarray,
+        S:np.ndarray,
+        clmat:np.ndarray,
+        n_components=None,
+        *,
+        copy=True,
+        whiten=False,
+        svd_solver="auto",
+        tol=0.0,
+        iterated_power="auto",
+        n_oversamples=10,
+        power_iteration_normalizer="auto",
+        random_state=None,
+    ):
+        super().__init__(
+            n_components=n_components,
+            copy=copy,
+            whiten=whiten,
+            svd_solver=svd_solver,
+            tol=tol,
+            iterated_power=iterated_power,
+            n_oversamples=n_oversamples,
+            power_iteration_normalizer=power_iteration_normalizer,
+            random_state=random_state,
+        )
+        self.condi = condi
+        self.length = length
+        self.f = f
+        self.q = q
+        self.S = S
+        self.clmat = clmat
+        self.mS = np.mean(S, axis=0)
+        self.ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
+        self.mll = np.mean(self.ll, axis=1)
+        self.fit(self.S)
+        self.PCspaceS = self.transform(self.S)
+        self.per_recon()
 
     @staticmethod
     def ExtractFileData(file:h5py.File, path:str, filter_obj:str, ncomps:int):
 
         l = len(filter_obj)         # length of filter_object
         Cond = path[:-l].replace('/', '&')
-
 
         if 'N_40' in path:
             NChain = 40
@@ -87,7 +122,6 @@ class FileData:
         elif 'f_2' in path:
             InterconDens = 2
         
-
         # get 'swell_sqiso_key' group and reshape it from (m, 1) to (m) and
         # conversion to experimental data
         qKey = np.squeeze(file[path])/5.19
@@ -98,27 +132,32 @@ class FileData:
         # get crosslink matrix
         crosslinks = file[path[:-l]+'crosslinks']
 
-
-        return FileData(Cond=Cond, NChain=NChain, InterconDens=InterconDens,\
-                        qKey=qKey, SData=SData, crosslinks=crosslinks,\
-                        NComps=ncomps)
+        return FileData(n_components=ncomps, condi=Cond, length=NChain,\
+                        f=InterconDens, q=qKey, S=SData,\
+                        clmat=crosslinks)
     
-
-    def
-    
-
-    def mll(self) -> np.ndarray:
+    def per_recon(self) -> None:
         '''
-        Function to calculate the mean loop length for each molecule
+        Function to calculate reconstructed date and related quantities from
+        PCA
         '''
+        # calculate reconstructed data
+        reconS = np.matmul(self.PCspaceS, self.components_) + self.mS
 
-        mll = np.abs(self.clmat[1] - self.clmat[2])
+        # calculate relative mean reonstruction error
+        mre = np.sqrt(np.mean((self.S - reconS)**2))/np.mean(self.mS)
 
-        return np.mean(mll, axis=1)
+        # calculate relative reconstruction error in q-space
+        re = np.sqrt(np.mean((self.S - reconS)**2, axis=0)) /self.mS
+
+        setattr(self, 'reconS', reconS)    # set reconstructed data
+        setattr(self, 'mre', mre)          # set relative mean error
+        setattr(self, 're', re)            # set relative reconstruction error
 
 
-def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
-                eva_path:str, system:str, TestRun:bool=False)\
+def filter_func(name:str, file:h5py.File, NComps:int=config['NComps'],\
+                filter_obj:str=config['filter_obj'],\
+                eva_path:str=config['eva_path'], system:str=config['system'])\
     -> None:
     '''
     Function to filter data groups in .hdf5 'input_file' that contain the
@@ -148,7 +187,6 @@ def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
         # print name in terminal for debugging
         print(f'{name}')
 
-
         # define seperator for file handling depending on operating system
         if system == 'windows':
             seperator = '\\'                    # define seperator for windows
@@ -157,69 +195,20 @@ def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
             seperator = '/'                     # define seperator for linux
                                                 # operating system
 
-
         DataObj = FileData.ExtractFileData(file=file, path=name,\
                                            filter_obj=filter_obj,\
                                            ncomps=NComps)
 
-
-        # perform PCA on 'swell_sqiso' data
-        # create PCA object
-        pca = PCA(n_components=DataObj.ncomps)
-        # fit PCA object to data
-        pca.fit(DataObj.S)
-        # get principle components
-        DataObj.comps = pca.components_
-        # get explained variance ratio
-        DataObj.varratio = pca.explained_variance_ratio_
-        # transform data to principel component space
-        DataObj.PCspaceS = pca.transform(DataObj.S)
-
-        
-        # calculate reconstraction error of PCA via root-mean-square method
-        # can i calculate that in the class? (ask Marco)
-        DataObj.reconS = np.matmul(DataObj.PCspaceS, DataObj.comps)\
-                         + DataObj.mS
-        DataObj.mre = np.sqrt(np.mean((DataObj.S - DataObj.reconS)**2))\
-                      /np.mean(DataObj.mS)
-        DataObj.re = np.sqrt(np.mean((DataObj.S - DataObj.reconS)**2, axis=0))\
-                     /DataObj.mS
-        
-
-        if not TestRun:
-            # plot principle components in q-space
-            plot_princ_comps(DataObj=DataObj, eva_path=eva_path,  system=system)
-
-
-            # plot structural factor in PC-space
-            plot_data_PCspace(DataObj=DataObj, eva_path=eva_path,\
-                              system=system)
-
-
-            # plot reconstruction error in q-space
-            plot_recon_error(DataObj=DataObj, eva_path=eva_path, system=system)
-
-
-            # plot example curves, reconstructed curves and mean curve in
-            # q-space
-            plot_data_qspace(DataObj=DataObj, eva_path=eva_path,\
-                                system=system)
-            
-
-            # plot loop length histogram
-            plot_loop_hist(DataObj=DataObj, eva_path=eva_path, system=system)
-
-
         # print and save results in seperate .txt file
         with open(eva_path + seperator + 'results.txt', 'a') as res_file:
-            res_file.write(f'chain length: {DataObj.length}\n')
-            res_file.write(f'Interconnection density: {DataObj.f}\n')
-            res_file.write('Relative mean reconstruction error:\n')
-            res_file.write(f'{round(DataObj.mre,6)}\n')
-            res_file.write(f'Variance ratio explained by component 1:\n')
-            res_file.write(f'{round(DataObj.varratio[0],6)}\n')
-            res_file.write(f'Variance ratio explained by component 2:\n')
-            res_file.write(f'{round(DataObj.varratio[1],6)}\n')
+            res_file.write(f'chain length:              {DataObj.length}\n' +\
+                           f'Connector distance:        {DataObj.f}\n' +\
+                           r'$\langle e_S\rangle$:     ' +\
+                           f'{round(DataObj.mre,6)}\n' +\
+                           r'$\sigma_1$:               ' +\
+                           f'{round(DataObj.explained_variance_ratio_[0],6)}'\
+                    '\n' + r'$\sigma_2$:               ' +\
+                           f'{round(DataObj.explained_variance_ratio_[1],6)}')
             res_file.write('-'*79 + '\n\n\n')
 
         # print separator line to indicate end of one condition evaluation in 
@@ -231,7 +220,7 @@ def filter_func(name:str, file:h5py.File, NComps:int, filter_obj:str,\
         return None
 
     
-def save_plot(fig:plt.Figure, name:str, path:str, system:str,\
+def save_plot(fig:plt.Figure, name:str, path:str, system:str=config['system'],\
               fileformat:str='.png') -> None:
     '''
     Function to safe plot
@@ -265,8 +254,8 @@ def save_plot(fig:plt.Figure, name:str, path:str, system:str,\
     plt.close()                                     # close figure
 
 
-def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
-    -> None:
+def plot_princ_comps(DataObj:FileData, eva_path:str=config['eva_path'],\
+                     system:str=config['system']) -> None:
     '''
     Function to make script more clear. It contains all lines regarding
     the plot of the principle components.
@@ -278,15 +267,14 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
     # important parameters for plotting principle components in q-space
     qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
     qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
-    Smin = 1.05*np.min([rms_c1*DataObj.comps[0,:]*DataObj.q**2,\
-                        rms_c2*DataObj.comps[1,:]*DataObj.q**2])\
-            - 0.05*np.max([rms_c1*DataObj.comps[0,:]*DataObj.q**2,\
-                            rms_c2*DataObj.comps[1,:]*DataObj.q**2])
-    Smax = 1.05*np.max([rms_c1*DataObj.comps[0,:]*DataObj.q**2,\
-                        rms_c2*DataObj.comps[1,:]*DataObj.q**2])\
-            - 0.05*np.min([rms_c1*DataObj.comps[0,:]*DataObj.q**2,\
-                           rms_c2*DataObj.comps[1,:]*DataObj.q**2])
-    
+    Smin = 1.05*np.min([rms_c1*DataObj.components_[0,:]*DataObj.q**2,\
+                        rms_c2*DataObj.components_[1,:]*DataObj.q**2])\
+            - 0.05*np.max([rms_c1*DataObj.components_[0,:]*DataObj.q**2,\
+                            rms_c2*DataObj.components_[1,:]*DataObj.q**2])
+    Smax = 1.05*np.max([rms_c1*DataObj.components_[0,:]*DataObj.q**2,\
+                        rms_c2*DataObj.components_[1,:]*DataObj.q**2])\
+            - 0.05*np.min([rms_c1*DataObj.components_[0,:]*DataObj.q**2,\
+                           rms_c2*DataObj.components_[1,:]*DataObj.q**2])
     
     # plot principle components in q-space
     fig = plt.figure(figsize=(6, 4))            # create figure
@@ -297,13 +285,12 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
     ax.set_xlabel(r'$q$ / [Å$^{-1}$]')	
     ax.set_ylabel(r'$S_1(q)q^2$')
 
-    ax.plot(DataObj.q, rms_c1*DataObj.comps[0,:]*DataObj.q**2, lw=1.0,\
+    ax.plot(DataObj.q, rms_c1*DataObj.components_[0,:]*DataObj.q**2, lw=1.0,\
             color='aqua', label='Component 1')
-    ax.plot(DataObj.q, rms_c2*DataObj.comps[1,:]*DataObj.q**2, lw=1.0,\
+    ax.plot(DataObj.q, rms_c2*DataObj.components_[1,:]*DataObj.q**2, lw=1.0,\
             color='springgreen', label='Component 2')
     
     ax.legend(loc='upper right')
-
 
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
@@ -317,10 +304,11 @@ def plot_princ_comps(DataObj:FileData, eva_path:str, system:str)\
            + seperator + f'N_{DataObj.length}'
 
     # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
+    save_plot(fig=fig, name=DataObj.condi, path=path)
 
 
-def plot_data_PCspace(DataObj:FileData, eva_path:str, system:str) -> None:
+def plot_data_PCspace(DataObj:FileData, eva_path:str=config['eva_path'],\
+                     system:str=config['system']) -> None:
     '''
     Function to make script more clear. It contains all lines regarding
     the plot of the structural factor in PC-space.
@@ -334,7 +322,9 @@ def plot_data_PCspace(DataObj:FileData, eva_path:str, system:str) -> None:
             - 0.05*np.max(DataObj.PCspaceS[:,1])
     c2max = 1.05*np.max(DataObj.PCspaceS[:,1])\
             - 0.05*np.min(DataObj.PCspaceS[:,1])
-
+    
+    color = DataObj.mll.flatten()          # color for scatter plot
+    color = color/np.max(color)            # normalize color for scatter plot
 
     # plot structurial factor in PC-space
     fig = plt.figure(figsize=(6, 4))                # create figure
@@ -345,10 +335,12 @@ def plot_data_PCspace(DataObj:FileData, eva_path:str, system:str) -> None:
     ax.set_xlabel(r'Principle omponent 1')
     ax.set_ylabel(r'Principle component 2')
 
-    ax.scatter(DataObj.PCspaceS[:,0], DataObj.PCspaceS[:,1],\
-                s=0.5, c='dodgerblue')
+    scatter = ax.scatter(DataObj.PCspaceS[:,0], DataObj.PCspaceS[:,1], s=0.5,\
+                         c=color, cmap='RdBu')
     
-
+    axcb = fig.colorbar(scatter, ax=ax)
+    axcb.set_label('mean loop length')
+    
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
                                             # operating system
@@ -361,10 +353,11 @@ def plot_data_PCspace(DataObj:FileData, eva_path:str, system:str) -> None:
             + seperator + f'N_{DataObj.length}'
 
     # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
+    save_plot(fig=fig, name=DataObj.condi, path=path)
 
 
-def plot_data_qspace(DataObj:FileData, eva_path:str, system:str) -> None:
+def plot_data_qspace(DataObj:FileData, eva_path:str=config['eva_path'],\
+                     system:str=config['system']) -> None:
     '''
     Function to make script more clear. It contains all lines regarding
     the plot of the example curves in q-space.
@@ -394,7 +387,6 @@ def plot_data_qspace(DataObj:FileData, eva_path:str, system:str) -> None:
                           DataObj.reconS[50,:]*DataObj.q**2,\
                           DataObj.reconS[350,:]*DataObj.q**2])
     
-    
     # plot example curves and mean curve in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
@@ -414,11 +406,10 @@ def plot_data_qspace(DataObj:FileData, eva_path:str, system:str) -> None:
     ax.loglog(DataObj.q, DataObj.reconS[350,:]*DataObj.q**2, lw=1.0,\
               ls='--', color='lightskyblue',\
               label='reconstructed example curve 2')
-    ax.loglog(DataObj.q, DataObj.rmsS*DataObj.q**2, lw=1.0,\
+    ax.loglog(DataObj.q, DataObj.mS*DataObj.q**2, lw=1.0,\
               color='black', label='mean curve')
     
     ax.legend(loc='lower right')            # set legend position
-
 
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
@@ -432,10 +423,11 @@ def plot_data_qspace(DataObj:FileData, eva_path:str, system:str) -> None:
            + 'example_in_qspace' + seperator + f'N_{DataObj.length}'
 
     # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
+    save_plot(fig=fig, name=DataObj.condi, path=path)
 
 
-def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
+def plot_recon_error(DataObj:FileData, eva_path:str=config['eva_path'],\
+                     system:str=config['system']) -> None:
     '''
     Function to make script more clear. It contains all lines regarding
     the plot of the reconstruction error, mean curves and example curves in
@@ -447,7 +439,6 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
     Smin = 1.05*np.min(DataObj.re) - 0.05*np.max(DataObj.re)
     Smax = 1.05*np.max(DataObj.re) - 0.05*np.min(DataObj.re)
 
-    
     # plot reconstruction error in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
@@ -459,7 +450,6 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
     
     ax.loglog(DataObj.q, DataObj.re, lw=1.0, color='tomato')
     
-
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
                                             # operating system
@@ -472,21 +462,83 @@ def plot_recon_error(DataObj:FileData, eva_path:str, system:str) -> None:
            + 'eS_in_qspace' + seperator + f'N_{DataObj.length}'
 
     # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path, system=system)
+    save_plot(fig=fig, name=DataObj.condi, path=path)
 
 
-def plot_loop_hist(DataObj:FileData, eva_path:str, system:str, bins:int)\
-    -> None:
+def plot_ll_hist(DataObj:FileData, binnum:int=config['binnum'],\
+                   eva_path:str=config['eva_path'],\
+                   system:str=config['system']) -> None:
     '''
     Function to make script more clear. It contains all lines regarding
-    the plot of the loop length histogram.
+    the plot of the loop length histogram. The bins are normalized as
+    such, that the area under the histogramm integrates to 1. For further
+    information please refere to the documentation of plt.hist().
     '''
+    # important parameters for plotting loop length histogram
+    bins = np.linspace(np.min(DataObj.ll), np.max(DataObj.ll), binnum)
+    llflat = DataObj.ll.flatten()
+    print('parameters')
+
+    # plot loop length histogram
+    fig = plt.figure(figsize=(8, 6))            # create figure
+    ax = fig.add_subplot(1, 1, 1)               # add subplot
+    print('fig')
+
+    ax.set_title(r'Histogram of loop lengths')
+    ax.set_xlabel(r'monomers per loop')
+    ax.set_ylabel(r'relative frequency')
+    print('ax')
+
+    ax.hist(llflat, bins=bins, density=True, color='dodgerblue')
+    print('hist')
+
+    if system == 'windows':
+        seperator = '\\'                    # define seperator for windows 
+                                            # operating system
+    elif system == 'linux':
+        seperator = '/'                     # define seperator for linux
+                                            # operating system
+
+    # define path to safe plot
+    path = eva_path + seperator +'plots' + seperator\
+           + 'll_hist' + seperator + f'N_{DataObj.length}'
+
+    # save and close figure
+    save_plot(fig=fig, name=DataObj.condi, path=path)
+
+
+def plot_mll_hist(DataObj:FileData, binnum:int=config['binnum'],\
+                   eva_path:str=config['eva_path'],\
+                   system:str=config['system']) -> None:
+    '''
+    Function to make script more clear. It contains all lines regarding
+    the plot of the mean loop length histogram. The bins are normalized as
+    such, that the area under the histogramm integrates to 1. For further
+    information please refere to the documentation of plt.hist().
+    '''
+    # important parameters for plotting loop length histogram
+    bins = np.linspace(np.min(DataObj.mll), np.max(DataObj.mll), binnum)
+
     # plot loop length histogram
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
 
-    ax.set_title(r'Histogram of the loop lengths')
-    ax.set_xlabel(r'monomers per loop')
-    ax.set_ylabel(r'absolut frequency')
+    ax.set_title(r'Histogram of mean loop lengths')
+    ax.set_xlabel(r'mean number of monomers per loop')
+    ax.set_ylabel(r'relative frequency')
 
-    ax.hist()
+    ax.hist(DataObj.mll, bins=bins, density=True, color='dodgerblue')
+
+    if system == 'windows':
+        seperator = '\\'                    # define seperator for windows 
+                                            # operating system
+    elif system == 'linux':
+        seperator = '/'                     # define seperator for linux
+                                            # operating system
+
+    # define path to safe plot
+    path = eva_path + seperator +'plots' + seperator\
+           + 'mll_hist' + seperator + f'N_{DataObj.length}'
+
+    # save and close figure
+    save_plot(fig=fig, name=DataObj.condi, path=path)

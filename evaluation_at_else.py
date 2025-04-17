@@ -10,27 +10,10 @@ at TU Dresden and Leibniz Institute of Polymer Research
 This script it used to get and evaluate simulated data from an .hdf5 file. It
 is part of a bachelor thesis in physics.
 '''
-
-import os
-import sys
-from os.path import exists
-sys.path.append(os.path.dirname(__file__))
-import library_MoChaTo as lib
-import glob
-import h5py
-import numpy as np
-import matplotlib.pyplot as plt
-
-
-# print statement if the script is executed
-print('-'*79)
-print('-'*79 + '\n')
-print('Executing evaluation script...')
-
-
 NComps = 2                      # number of principle components to perform
                                 # PCA with
-TestRun = True                  # set to True if only a test run is needed:
+binnum = 20                     # number of bins for hinstogramm plots
+TestRun = False                 # set to True if only a test run is needed:
                                 # only diagramms for first condition and
                                 # inter-condition evaluation will be plotted
 
@@ -51,6 +34,39 @@ search_crit = root_dir + '\\**\\*.hdf5'.replace('\\', seperator)
 
 filter_obj = 'swell_sqiso_key'
 eva_path = root_dir + '\\script_evaluation'.replace('\\', seperator)
+
+
+config = {
+    'NComps' : NComps,
+    'binnum' : binnum,
+    'root_dir' : root_dir,
+    'search_crit' : search_crit,
+    'filter_obj' : filter_obj,
+    'eva_path' : eva_path,
+    'system' : system,
+}
+
+import json
+
+with open('.\\Scripts\\config.json', 'w') as configf:
+    json.dump(config, configf)
+
+
+import os
+import sys
+from os.path import exists
+sys.path.append(os.path.dirname(__file__))
+import library_MoChaTo as lib
+import glob
+import h5py
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+# print statement if the script is executed
+print('-'*79)
+print('-'*79 + '\n')
+print('Executing evaluation script...')
 
 
 for path in glob.glob(root_dir+search_crit, recursive=True):
@@ -75,11 +91,31 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     
     with h5py.File(path, 'r') as file:
         file.visit(lambda x: DataObjs.append(lib.filter_func(name=x,\
-                   file=file, NComps=NComps, filter_obj=filter_obj,\
-                   eva_path=eva_path, system=system, TestRun=TestRun)))
+                   file=file)))
         
     DataObjs = [obj for obj in DataObjs if obj is not None]     # remove None
-                                                    
+
+    for DataObj in DataObjs:
+        if not TestRun:
+            # plot principle components in q-space
+            lib.plot_princ_comps(DataObj=DataObj)
+
+            # plot structural factor in PC-space
+            lib.plot_data_PCspace(DataObj=DataObj)
+
+            # plot reconstruction error in q-space
+            lib.plot_recon_error(DataObj=DataObj)
+
+            # plot example curves, reconstructed curves and mean curve in
+            # q-space
+            lib.plot_data_qspace(DataObj=DataObj)
+            
+            # plot histogramm of loop length, problem: data to large
+            # lib.plot_ll_hist(DataObj=DataObj)
+
+            # plot histogramm of mean loop length
+            lib.plot_mll_hist(DataObj=DataObj)
+
 
     # get different f for each chain length
     fn40 = [obj.f for obj in DataObjs if obj.length == 40]
