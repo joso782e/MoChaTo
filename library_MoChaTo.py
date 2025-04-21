@@ -144,15 +144,25 @@ class FileData(PCA):
         # calculate reconstructed data
         reconS = np.matmul(self.PCspaceS, self.components_) + self.mS
 
+        # calculate difference between original and reconstructed data
+        diff = self.S - reconS
+
         # calculate relative mean reonstruction error
-        mre = np.sqrt(np.mean((self.S - reconS)**2))/np.mean(self.mS)
+        mre = np.sqrt(np.mean((diff)**2))/np.mean(self.mS)
+        # variance of error
+        mrevar = np.mean((diff - mre*np.mean(self.mS))**2)
 
         # calculate relative reconstruction error in q-space
-        re = np.sqrt(np.mean((self.S - reconS)**2, axis=0)) /self.mS
+        re = np.sqrt(np.mean((diff)**2, axis=0))/self.mS
+        # variance of error
+        revar = np.mean((diff - re*self.mS)**2, axis=0)
 
-        setattr(self, 'reconS', reconS)    # set reconstructed data
-        setattr(self, 'mre', mre)          # set relative mean error
-        setattr(self, 're', re)            # set relative reconstruction error
+        setattr(self, 'reconS', reconS)     # set reconstructed data
+        setattr(self, 'mre', mre)           # set relative mean error
+        setattr(self, 're', re)             # set relative reconstruction error
+        setattr(self, 'mrevar', mrevar)     # set variance of relative mean
+                                            # error
+        setattr(self, 'revar', revar)       # set variance of relative error
 
 
 def filter_func(name:str, file:h5py.File, NComps:int=config['NComps'],\
@@ -265,8 +275,8 @@ def plot_princ_comps(DataObj:FileData, eva_path:str=config['eva_path'],\
     rms_c2 = np.sqrt(np.mean(DataObj.PCspaceS[:,1]**2))
 
     # important parameters for plotting principle components in q-space
-    qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
-    qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
+    qmin = np.exp(1e-2)
+    qmax = 1
     Smin = 1.05*np.min([rms_c1*DataObj.components_[0,:]*DataObj.q**2,\
                         rms_c2*DataObj.components_[1,:]*DataObj.q**2])\
             - 0.05*np.max([rms_c1*DataObj.components_[0,:]*DataObj.q**2,\
@@ -279,15 +289,15 @@ def plot_princ_comps(DataObj:FileData, eva_path:str=config['eva_path'],\
     # plot principle components in q-space
     fig = plt.figure(figsize=(6, 4))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
-    ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
+    #ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
     ax.set_title(r'Scaled principle components in $q$-space')
     ax.set_xlabel(r'$q$ / [Å$^{-1}$]')	
     ax.set_ylabel(r'$S_1(q)q^2$')
 
-    ax.plot(DataObj.q, rms_c1*DataObj.components_[0,:]*DataObj.q**2, lw=1.0,\
+    ax.loglog(DataObj.q, rms_c1*DataObj.components_[0,:]*DataObj.q**2, lw=1.0,\
             color='aqua', label='Component 1')
-    ax.plot(DataObj.q, rms_c2*DataObj.components_[1,:]*DataObj.q**2, lw=1.0,\
+    ax.loglog(DataObj.q, rms_c2*DataObj.components_[1,:]*DataObj.q**2, lw=1.0,\
             color='springgreen', label='Component 2')
     
     ax.legend(loc='upper right')
@@ -363,35 +373,18 @@ def plot_data_qspace(DataObj:FileData, eva_path:str=config['eva_path'],\
     '''
     # important parameters for plotting example curves and mean curve in
     # q-space
-    qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
-    qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
-    Smin = 1.05*np.min([DataObj.mS*DataObj.q**2,\
-                        DataObj.S[50,:]*DataObj.q**2,\
-                        DataObj.S[350,:]*DataObj.q**2,\
-                        DataObj.reconS[50,:]*DataObj.q**2,\
-                        DataObj.reconS[350,:]*DataObj.q**2])\
-           - 0.05*np.max([DataObj.mS*DataObj.q**2,\
-                          DataObj.S[50,:]*DataObj.q**2,\
-                          DataObj.S[350,:]*DataObj.q**2,\
-                          DataObj.reconS[50,:]*DataObj.q**2,\
-                          DataObj.reconS[350,:]*DataObj.q**2])
-    Smax = 1.05*np.max([DataObj.mS*DataObj.q**2,\
-                        DataObj.S[50,:]*DataObj.q**2,\
-                        DataObj.S[350,:]*DataObj.q**2,\
-                        DataObj.reconS[50,:]*DataObj.q**2,\
-                        DataObj.reconS[350,:]*DataObj.q**2])\
-           - 0.05*np.min([DataObj.mS*DataObj.q**2,\
-                          DataObj.S[50,:]*DataObj.q**2,\
-                          DataObj.S[350,:]*DataObj.q**2,\
-                          DataObj.reconS[50,:]*DataObj.q**2,\
-                          DataObj.reconS[350,:]*DataObj.q**2])
+    qmin = -2
+    qmax = 1.0
+    Smin = np.exp(1e-4)
+    Smax = np.max(DataObj.S)*1.05
     
     # plot example curves and mean curve in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
-    #ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
+    ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
-    ax.set_title(r'Experimental, reconstructed and mean structural factor in $q$-space')
+    ax.set_title('Experimental, reconstructed and mean structural factor in'\
+                 + r' $q$-space')
     ax.set_xlabel(r'$q$ / [Å$^{-1}$]')
     ax.set_ylabel(r'$S(q)q^2$')
 
@@ -433,21 +426,25 @@ def plot_recon_error(DataObj:FileData, eva_path:str=config['eva_path'],\
     q-space.
     '''
     # important parameters for plotting reconstruction error in q-space
-    qmin = 1.05*np.min(DataObj.q) - 0.05*np.max(DataObj.q)
-    qmax = 1.05*np.max(DataObj.q) - 0.05*np.min(DataObj.q)
-    Smin = 1.05*np.min(DataObj.re) - 0.05*np.max(DataObj.re)
-    Smax = 1.05*np.max(DataObj.re) - 0.05*np.min(DataObj.re)
+    qmin = np.exp(1e-2)
+    qmax = 1.0
+    Smin = np.exp(1e-4)
+    Smax = np.max(DataObj.re)*1.05
 
     # plot reconstruction error in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
-    #ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
+    ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
     ax.set_title(r'Relative reconstruction error in $q$-space')
     ax.set_xlabel(r'$q$ / [Å$^{-1}$]')
     ax.set_ylabel(r'$e_S$')
     
-    ax.loglog(DataObj.q, DataObj.re, lw=1.0, color='tomato')
+    ax.errorbar(DataObj.q, DataObj.re, yerr=np.sqrt(DataObj.revar),  lw=1.0,\
+                color='tomato')
+    
+    ax.set_yscale('log')                     # set y-axis to log scale
+    ax.set_xscale('log')                     # set x-axis to log scale
     
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
@@ -476,20 +473,16 @@ def plot_ll_hist(DataObj:FileData, binnum:int=config['binnum'],\
     # important parameters for plotting loop length histogram
     bins = np.linspace(np.min(DataObj.ll), np.max(DataObj.ll), binnum)
     llflat = DataObj.ll.flatten()
-    print('parameters')
 
     # plot loop length histogram
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
-    print('fig')
 
     ax.set_title(r'Histogram of loop lengths')
     ax.set_xlabel(r'monomers per loop')
     ax.set_ylabel(r'relative frequency')
-    print('ax')
 
     ax.hist(llflat, bins=bins, density=True, color='dodgerblue')
-    print('hist')
 
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
@@ -526,7 +519,7 @@ def plot_mll_hist(DataObj:FileData, binnum:int=config['binnum'],\
     ax.set_xlabel(r'mean number of monomers per loop')
     ax.set_ylabel(r'relative frequency')
 
-    ax.hist(DataObj.mll, bins=bins, density=True, color='dodgerblue')
+    ax.hist(DataObj.mll, bins=bins, density=False, color='dodgerblue')
 
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 

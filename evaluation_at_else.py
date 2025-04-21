@@ -127,6 +127,10 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     ren100 = [obj.mre for obj in DataObjs if obj.length == 100]
     ren200 = [obj.mre for obj in DataObjs if obj.length == 200]
 
+    # varianze of reconstruction error for each chain length
+    var40 = [np.sqrt(obj.mrevar) for obj in DataObjs if obj.length == 40]
+    var100 = [np.sqrt(obj.mrevar) for obj in DataObjs if obj.length == 100]
+    var200 = [np.sqrt(obj.mrevar) for obj in DataObjs if obj.length == 200]
 
     # important parameters for plotting e_S
     fmin = 1.05*np.min([np.min(fn40), np.min(fn100), np.min(fn200)])\
@@ -148,12 +152,15 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     ax.set_xlabel(r'f')
     ax.set_ylabel(r'$\langle e_S\rangle$')
 
-    ax.scatter(1/np.array(fn40), ren40,\
-            s=3.5, color='dodgerblue', label=r'$n=40$')
-    ax.scatter(1/np.array(fn100), ren100,\
-            s=3.5, color='tomato', label=r'$n=100$')
-    ax.scatter(1/np.array(fn200), ren200,\
-            s=3.5, color='springgreen', label=r'$n=200$')
+    ax.errorbar(1/np.array(fn40), ren40, yerr=var40, errorevery=(0, 3),\
+                ls='None', marker='o', ms=3.5, mfc='dodgerblue',\
+                mec='dodgerblue', label=r'$n=40$')
+    ax.errorbar(1/np.array(fn100), ren100, yerr=var100, errorevery=(0, 3),\
+                ls='None', marker='o', ms=3.5, mfc='tomato', mec='tomato',\
+                label=r'$n=100$')
+    ax.errorbar(1/np.array(fn200), ren200, yerr=var200, errorevery=(1, 3),\
+                ls='None', marker='o', ms=3.5, mfc='springgreen',\
+                mec='springgreen', label=r'$n=200$')
 
     ax.legend(loc='upper right')            # set legend position
 
