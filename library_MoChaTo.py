@@ -440,7 +440,7 @@ def plot_recon_error(DataObj:FileData, eva_path:str=config['eva_path'],\
     ax.plot(DataObj.q, DataObj.re*DataObj.q**2,  lw=1.0, color='tomato',\
             label=r'$e_S(q)$')
     ax.plot(DataObj.q, np.sqrt(DataObj.empvar)*DataObj.q**2, lw=1.0,\
-            color='dogerblue', label=r'$\sigma_{emp}$')
+            color='dodgerblue', label=r'$\sigma_{emp}$')
     ax.plot(DataObj.q, np.sqrt(DataObj.revar)*DataObj.q**2, lw=1.0, ls='--',\
             color='tomato', label=r'$\sigma_{e_S}$')
     
