@@ -44,6 +44,8 @@ class FileData(PCA):
     - reconS:       reconstructed form factor in q-space
     - mre:          relative mean reconstruction error
     - re:           relative reconstruction error in q-space
+    - mrevar:       variance of relative mean reconstruction error
+    - revar:        variance of relative reconstruction error in q-space
     '''   
     # define contructor
     def __init__(
@@ -426,7 +428,6 @@ def plot_recon_error(DataObj:FileData, eva_path:str=config['eva_path'],\
     '''
     # important parameters for plotting reconstruction error in q-space
     qmin = 1e-2
-    Smin = 1e-4
 
     # plot reconstruction error in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
@@ -437,15 +438,17 @@ def plot_recon_error(DataObj:FileData, eva_path:str=config['eva_path'],\
     ax.set_ylabel(r'$e_S$')
     
     ax.plot(DataObj.q, DataObj.re*DataObj.q**2,  lw=1.0, color='tomato',\
-            label='reconstruction error')
-    ax.plot(DataObj.q, np.sqrt(DataObj.empvar)*DataObj.q**2, lw=1.0, ls='--',\
-            color='tomato', label='empirical variance')
-    ax.plot(DataObj.q, DataObj.re)
+            label=r'$e_S(q)$')
+    ax.plot(DataObj.q, np.sqrt(DataObj.empvar)*DataObj.q**2, lw=1.0,\
+            color='dogerblue', label=r'$\sigma_{emp}$')
+    ax.plot(DataObj.q, np.sqrt(DataObj.revar)*DataObj.q**2, lw=1.0, ls='--',\
+            color='tomato', label=r'$\sigma_{e_S}$')
+    
+    ax.legend(loc='upper right')            # set legend position
     
     ax.set_yscale('log')                     # set y-axis to log scale
     ax.set_xscale('log')                     # set x-axis to log scale
     ax.set_xlim(left=qmin)                   # set x-axis limits
-    ax.set_ylim(bottom=Smin)                 # set y-axis limits
     
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
