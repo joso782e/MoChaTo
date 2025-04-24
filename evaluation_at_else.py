@@ -12,7 +12,7 @@ is part of a bachelor thesis in physics.
 '''
 NComps = 2                      # number of principle components to perform
                                 # PCA with
-binnum = 20                     # number of bins for hinstogramm plots
+binnum = 30                     # number of bins for hinstogramm plots
 TestRun = False                 # set to True if only a test run is needed:
                                 # only diagramms for first condition and
                                 # inter-condition evaluation will be plotted

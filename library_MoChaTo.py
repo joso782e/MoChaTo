@@ -152,12 +152,12 @@ class FileData(PCA):
         # calculate relative mean reonstruction error
         mre = np.sqrt(np.mean((diff)**2))/np.mean(self.mS)
         # variance of error
-        mrevar = np.mean((diff - mre*np.mean(self.mS))**2)
+        mrevar = np.mean((diff/np.mean(self.mS) - mre)**2)
 
         # calculate relative reconstruction error in q-space
         re = np.sqrt(np.mean((diff)**2, axis=0))/self.mS
         # variance of error
-        revar = np.mean((diff - re*self.mS)**2, axis=0)
+        revar = np.mean((diff/self.mS - re)**2, axis=0)
 
         setattr(self, 'reconS', reconS)     # set reconstructed data
         setattr(self, 'mre', mre)           # set relative mean error
@@ -215,13 +215,15 @@ def filter_func(name:str, file:h5py.File, NComps:int=config['NComps'],\
         with open(eva_path + seperator + 'results.txt', 'a') as res_file:
             res_file.write(f'chain length:              {DataObj.length}\n' +\
                            f'Connector distance:        {DataObj.f}\n' +\
-                           r'$\langle e_S\rangle$:     ' +\
+                            'empirical variance:         ' +\
+                           f'{round(np.mean(DataObj.empvar),6)}\n' +\
+                           r'$\langle e_S\rangle$:      ' +\
                            f'{round(DataObj.mre,6)}\n' +\
-                           r'$\sigma_1$:               ' +\
+                           r'$\sigma_1$:                ' +\
                            f'{round(DataObj.explained_variance_ratio_[0],6)}'\
-                    '\n' + r'$\sigma_2$:               ' +\
+                    '\n' + r'$\sigma_2$:                ' +\
                            f'{round(DataObj.explained_variance_ratio_[1],6)}')
-            res_file.write('-'*79 + '\n\n\n')
+            res_file.write('\n' + '-'*79 + '\n\n\n')
 
         # print separator line to indicate end of one condition evaluation in 
         # terminal for debugging
@@ -277,21 +279,12 @@ def plot_princ_comps(DataObj:FileData, eva_path:str=config['eva_path'],\
     rms_c2 = np.sqrt(np.mean(DataObj.PCspaceS[:,1]**2))
 
     # important parameters for plotting principle components in q-space
-    qmin = np.exp(1e-2)
-    qmax = 1
-    Smin = 1.05*np.min([rms_c1*DataObj.components_[0,:]*DataObj.q**2,\
-                        rms_c2*DataObj.components_[1,:]*DataObj.q**2])\
-            - 0.05*np.max([rms_c1*DataObj.components_[0,:]*DataObj.q**2,\
-                            rms_c2*DataObj.components_[1,:]*DataObj.q**2])
-    Smax = 1.05*np.max([rms_c1*DataObj.components_[0,:]*DataObj.q**2,\
-                        rms_c2*DataObj.components_[1,:]*DataObj.q**2])\
-            - 0.05*np.min([rms_c1*DataObj.components_[0,:]*DataObj.q**2,\
-                           rms_c2*DataObj.components_[1,:]*DataObj.q**2])
+    qmin = 1e-2
+
     
     # plot principle components in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
-    #ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
     ax.set_title(r'Scaled principle components in $q$-space')
     ax.set_xlabel(r'$q$ / [Å$^{-1}$]')	
@@ -303,7 +296,8 @@ def plot_princ_comps(DataObj:FileData, eva_path:str=config['eva_path'],\
             color='springgreen', label='Component 2')
     
     ax.legend(loc='upper right')
-    
+    ax.set_xlim(left=qmin)                  # set x-axis limits
+
 
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
@@ -382,7 +376,6 @@ def plot_data_qspace(DataObj:FileData, eva_path:str=config['eva_path'],\
     # plot example curves and mean curve in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
-    #ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
     ax.set_title('Experimental, reconstructed and mean form factor in'\
                  + r' $q$-space')
@@ -390,18 +383,17 @@ def plot_data_qspace(DataObj:FileData, eva_path:str=config['eva_path'],\
     ax.set_ylabel(r'$S(q)q^2$')
 
     ax.plot(DataObj.q, DataObj.S[50,:]*DataObj.q**2, lw=1.0,\
-              color='dodgerblue', label='example curve 1')
+            color='dodgerblue', label='example curve 1')
     ax.plot(DataObj.q, DataObj.S[350,:]*DataObj.q**2, lw=1.0,\
-              color='lightskyblue', label='example curve 2')
+            color='lightskyblue', label='example curve 2')
     ax.plot(DataObj.q, DataObj.reconS[50,:]*DataObj.q**2, lw=1.0,\
-              ls='--', color='dodgerblue',\
-              label='reconstructed example curve 1')
+            ls='--', color='dodgerblue',\
+            label='reconstructed example curve 1')
     ax.plot(DataObj.q, DataObj.reconS[350,:]*DataObj.q**2, lw=1.0,\
-              ls='--', color='lightskyblue',\
-              label='reconstructed example curve 2')
-    ax.errorbar(DataObj.q, DataObj.mS*DataObj.q**2,\
-                yerr=np.sqrt(DataObj.empvar), lw=1.0, color='black',\
-                label='mean curve with empirical variance')
+            ls='--', color='lightskyblue',\
+            label='reconstructed example curve 2')
+    ax.plot(DataObj.q, DataObj.mS*DataObj.q**2, lw=1.0, color='black',\
+            label='mean curve with empirical variance')
     
     ax.legend(loc='lower right')            # set legend position
     ax.set_yscale('log')                    # set y-axis to log scale
@@ -444,11 +436,11 @@ def plot_recon_error(DataObj:FileData, eva_path:str=config['eva_path'],\
     ax.set_xlabel(r'$q$ / [Å$^{-1}$]')
     ax.set_ylabel(r'$e_S$')
     
-    ax.errorbar(DataObj.q, DataObj.re*DataObj.q**2,\
-                yerr=np.sqrt(DataObj.revar),  lw=1.0, color='tomato',\
-                label='reconstruction error')
+    ax.plot(DataObj.q, DataObj.re*DataObj.q**2,  lw=1.0, color='tomato',\
+            label='reconstruction error')
     ax.plot(DataObj.q, np.sqrt(DataObj.empvar)*DataObj.q**2, lw=1.0, ls='--',\
             color='tomato', label='empirical variance')
+    ax.plot(DataObj.q, DataObj.re)
     
     ax.set_yscale('log')                     # set y-axis to log scale
     ax.set_xscale('log')                     # set x-axis to log scale
@@ -572,8 +564,8 @@ def plot_mll_vs_ci(DataObj:FileData, i:int, eva_path:str=config['eva_path'],\
     ax.set_xlabel(fr'$c_{i}$')
     ax.set_ylabel(r'mean number of monomers per loop')
 
-    ax.plot(DataObj.PCspaceS[:,i-1], DataObj.mll, ls='None', ms=0.5,\
-            color='dodgerblue')
+    ax.plot(DataObj.PCspaceS[:,i-1], DataObj.mll, ls='None', marker='o',\
+            ms=3.5, mfc='dodgerblue', mec='dodgerblue')
 
 
     if system == 'windows':
