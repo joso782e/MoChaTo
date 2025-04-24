@@ -34,13 +34,14 @@ class FileData(PCA):
     - length:       chainlength in number of spheres
     - f:            connector distance
     - q:            values in q-space
-    - S:            structural factor in q-space
+    - S:            form factor in q-space
     - clmat:        crosslink matrix
-    - mS:           mean of structural factor in q-space
+    - mS:           mean of form factor in q-space
+    - empvar:       empirical variance of form factor in q-space
     - ll:           loop length
     - mll:          mean loop length
-    - PCspaceS:     structural factor in PC-space
-    - reconS:       reconstructed structural factor in q-space
+    - PCspaceS:     form factor in PC-space
+    - reconS:       reconstructed form factor in q-space
     - mre:          relative mean reconstruction error
     - re:           relative reconstruction error in q-space
     '''   
@@ -82,6 +83,7 @@ class FileData(PCA):
         self.S = S
         self.clmat = clmat
         self.mS = np.mean(S, axis=0)
+        self.empvar = np.var(S, axis=0)/self.mS**2
         self.ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
         self.mll = np.mean(self.ll, axis=1)
         self.fit(self.S)
@@ -287,7 +289,7 @@ def plot_princ_comps(DataObj:FileData, eva_path:str=config['eva_path'],\
                            rms_c2*DataObj.components_[1,:]*DataObj.q**2])
     
     # plot principle components in q-space
-    fig = plt.figure(figsize=(6, 4))            # create figure
+    fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
     #ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
@@ -301,6 +303,7 @@ def plot_princ_comps(DataObj:FileData, eva_path:str=config['eva_path'],\
             color='springgreen', label='Component 2')
     
     ax.legend(loc='upper right')
+    
 
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
@@ -321,9 +324,9 @@ def plot_data_PCspace(DataObj:FileData, eva_path:str=config['eva_path'],\
                      system:str=config['system']) -> None:
     '''
     Function to make script more clear. It contains all lines regarding
-    the plot of the structural factor in PC-space.
+    the plot of the form factor in PC-space.
     '''
-    # important parameters for plotting structural factor in PC-space
+    # important parameters for plotting form factor in PC-space
     c1min = 1.05*np.min(DataObj.PCspaceS[:,0])\
             - 0.05*np.max(DataObj.PCspaceS[:,0])
     c1max = 1.05*np.max(DataObj.PCspaceS[:,0])\
@@ -335,12 +338,12 @@ def plot_data_PCspace(DataObj:FileData, eva_path:str=config['eva_path'],\
     
     color = DataObj.mll/np.max(DataObj.mll)         # color for scatter plot
 
-    # plot structurial factor in PC-space
-    fig = plt.figure(figsize=(6, 4))                # create figure
+    # plot form factor in PC-space
+    fig = plt.figure(figsize=(8, 6))                # create figure
     ax = fig.add_subplot(1, 1, 1)                   # add subplot
     ax.axis([c1min, c1max, c2min, c2max])           # set axis limits
 
-    ax.set_title(r'Structural factor in PC-space')
+    ax.set_title(r'Form factor in PC-space')
     ax.set_xlabel(r'Principle omponent 1')
     ax.set_ylabel(r'Principle component 2')
 
@@ -373,35 +376,39 @@ def plot_data_qspace(DataObj:FileData, eva_path:str=config['eva_path'],\
     '''
     # important parameters for plotting example curves and mean curve in
     # q-space
-    qmin = -2
-    qmax = 1.0
-    Smin = np.exp(1e-4)
-    Smax = np.max(DataObj.S)*1.05
+    qmin = 1e-2
+    Smin = 1e-4
     
     # plot example curves and mean curve in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
-    ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
+    #ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
-    ax.set_title('Experimental, reconstructed and mean structural factor in'\
+    ax.set_title('Experimental, reconstructed and mean form factor in'\
                  + r' $q$-space')
     ax.set_xlabel(r'$q$ / [Å$^{-1}$]')
     ax.set_ylabel(r'$S(q)q^2$')
 
-    ax.loglog(DataObj.q, DataObj.S[50,:]*DataObj.q**2, lw=1.0,\
+    ax.plot(DataObj.q, DataObj.S[50,:]*DataObj.q**2, lw=1.0,\
               color='dodgerblue', label='example curve 1')
-    ax.loglog(DataObj.q, DataObj.S[350,:]*DataObj.q**2, lw=1.0,\
+    ax.plot(DataObj.q, DataObj.S[350,:]*DataObj.q**2, lw=1.0,\
               color='lightskyblue', label='example curve 2')
-    ax.loglog(DataObj.q, DataObj.reconS[50,:]*DataObj.q**2, lw=1.0,\
+    ax.plot(DataObj.q, DataObj.reconS[50,:]*DataObj.q**2, lw=1.0,\
               ls='--', color='dodgerblue',\
               label='reconstructed example curve 1')
-    ax.loglog(DataObj.q, DataObj.reconS[350,:]*DataObj.q**2, lw=1.0,\
+    ax.plot(DataObj.q, DataObj.reconS[350,:]*DataObj.q**2, lw=1.0,\
               ls='--', color='lightskyblue',\
               label='reconstructed example curve 2')
-    ax.loglog(DataObj.q, DataObj.mS*DataObj.q**2, lw=1.0,\
-              color='black', label='mean curve')
+    ax.errorbar(DataObj.q, DataObj.mS*DataObj.q**2,\
+                yerr=np.sqrt(DataObj.empvar), lw=1.0, color='black',\
+                label='mean curve with empirical variance')
     
     ax.legend(loc='lower right')            # set legend position
+    ax.set_yscale('log')                    # set y-axis to log scale
+    ax.set_xscale('log')                    # set x-axis to log scale
+    ax.set_xlim(left=qmin)                  # set x-axis limits
+    ax.set_ylim(bottom=Smin)                # set y-axis limits
+
 
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
@@ -426,25 +433,27 @@ def plot_recon_error(DataObj:FileData, eva_path:str=config['eva_path'],\
     q-space.
     '''
     # important parameters for plotting reconstruction error in q-space
-    qmin = np.exp(1e-2)
-    qmax = 1.0
-    Smin = np.exp(1e-4)
-    Smax = np.max(DataObj.re)*1.05
+    qmin = 1e-2
+    Smin = 1e-4
 
     # plot reconstruction error in q-space
     fig = plt.figure(figsize=(8, 6))            # create figure
     ax = fig.add_subplot(1, 1, 1)               # add subplot
-    ax.axis([qmin, qmax, Smin, Smax])           # set axis limits
 
     ax.set_title(r'Relative reconstruction error in $q$-space')
     ax.set_xlabel(r'$q$ / [Å$^{-1}$]')
     ax.set_ylabel(r'$e_S$')
     
-    ax.errorbar(DataObj.q, DataObj.re, yerr=np.sqrt(DataObj.revar),  lw=1.0,\
-                color='tomato')
+    ax.errorbar(DataObj.q, DataObj.re*DataObj.q**2,\
+                yerr=np.sqrt(DataObj.revar),  lw=1.0, color='tomato',\
+                label='reconstruction error')
+    ax.plot(DataObj.q, np.sqrt(DataObj.empvar)*DataObj.q**2, lw=1.0, ls='--',\
+            color='tomato', label='empirical variance')
     
     ax.set_yscale('log')                     # set y-axis to log scale
     ax.set_xscale('log')                     # set x-axis to log scale
+    ax.set_xlim(left=qmin)                   # set x-axis limits
+    ax.set_ylim(bottom=Smin)                 # set y-axis limits
     
     if system == 'windows':
         seperator = '\\'                    # define seperator for windows 
@@ -531,6 +540,52 @@ def plot_mll_hist(DataObj:FileData, binnum:int=config['binnum'],\
     # define path to safe plot
     path = eva_path + seperator +'plots' + seperator\
            + 'mll_hist' + seperator + f'N_{DataObj.length}'
+
+    # save and close figure
+    save_plot(fig=fig, name=DataObj.condi, path=path)
+
+
+def plot_mll_vs_ci(DataObj:FileData, i:int, eva_path:str=config['eva_path'],\
+                    system:str=config['system']) -> None:
+    '''
+    Function to make script more clear. It contains all lines regarding the
+    plot of the mean loop length depending on the coordinate in the "i"-th
+    principle component.
+    '''
+    # important parameters for plotting mean loop length depending on
+    # the coordinates in the "i"-th principle component
+    cimin = 1.05*np.min(DataObj.PCspaceS[:,i-1])\
+           - 0.05*np.max(DataObj.PCspaceS[:,i-1])
+    cimax = 1.05*np.max(DataObj.PCspaceS[:,i-1])\
+           - 0.05*np.min(DataObj.PCspaceS[:,i-1])
+    mllmin = 1.05*np.min(DataObj.mll)\
+             - 0.05*np.max(DataObj.mll)
+    mllmax = 1.05*np.max(DataObj.mll)\
+             - 0.05*np.min(DataObj.mll)
+    
+    # plot mll vs ci
+    fig = plt.figure(figsize=(8, 6))            # create figure
+    ax = fig.add_subplot(1, 1, 1)               # add subplot
+    ax.axis([cimin, cimax, mllmin, mllmax])     # set axis limits
+
+    ax.set_title(r'Mean loop length depending on' + f' $c_{i}$ in PC-space')
+    ax.set_xlabel(fr'$c_{i}$')
+    ax.set_ylabel(r'mean number of monomers per loop')
+
+    ax.plot(DataObj.PCspaceS[:,i-1], DataObj.mll, ls='None', ms=0.5,\
+            color='dodgerblue')
+
+
+    if system == 'windows':
+        seperator = '\\'                    # define seperator for windows 
+                                            # operating system
+    elif system == 'linux':
+        seperator = '/'                     # define seperator for linux
+                                            # operating system
+
+    # define path to safe plot
+    path = eva_path + seperator +'plots' + seperator\
+           + f'mll_vs_c{i}' + seperator + f'N_{DataObj.length}'
 
     # save and close figure
     save_plot(fig=fig, name=DataObj.condi, path=path)

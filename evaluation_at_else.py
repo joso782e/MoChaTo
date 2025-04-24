@@ -116,6 +116,12 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
             # plot histogramm of mean loop length
             lib.plot_mll_hist(DataObj=DataObj)
 
+            # plot mean loop length against c1
+            lib.plot_mll_vs_ci(DataObj=DataObj, i=1)
+
+            # plot mean loop length against c2
+            lib.plot_mll_vs_ci(DataObj=DataObj, i=2)
+
 
     # get different f for each chain length
     fn40 = [obj.f for obj in DataObjs if obj.length == 40]
