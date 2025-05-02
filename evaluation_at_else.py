@@ -13,7 +13,7 @@ is part of a bachelor thesis in physics.
 NComps = 2                      # number of principle components to perform
                                 # PCA with
 binnum = 30                     # number of bins for hinstogramm plots
-TestRun = False                 # set to True if only a test run is needed:
+TestRun = True                  # set to True if only a test run is needed:
                                 # only diagramms for first condition and
                                 # inter-condition evaluation will be plotted
 
@@ -48,7 +48,9 @@ config = {
 
 import json
 
-with open('.\\Scripts\\config.json', 'w') as configf:
+with open(
+    '.\data_evaluation\Scripts\config.json'.replace('\\', seperator),
+    'w') as configf:
     json.dump(config, configf)
 
 

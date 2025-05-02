@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 print("Module \"library_MoChaTo.py\" imported successfully")
 
 
-with open('.\\Scripts\\config.json', 'r') as configf:
+with open('.\\data_evaluation\\Scripts\\config.json', 'r') as configf:
     config = json.load(configf)
 
 
@@ -83,10 +83,19 @@ class FileData(PCA):
         self.f = f
         self.q = q
         self.S = S
-        self.clmat = clmat
+        self.clmat = np.squeeze(np.asanyarray(clmat, dtype=np.int_))
+        print('all')
+        print(self.clmat[:,:,:])
+        print('page2')
+        print(self.clmat[:,:,1])
+        print('page3')
+        print(self.clmat[:,:,2])
         self.mS = np.mean(S, axis=0)
         self.empvar = np.var(S, axis=0)/self.mS**2
-        self.ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
+        ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
+        self.ll = ll
+        print('ll')
+        print(self.ll)
         self.mll = np.mean(self.ll, axis=1)
         self.fit(self.S)
         self.PCspaceS = self.transform(self.S)
