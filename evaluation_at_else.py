@@ -43,6 +43,7 @@ config = {
     'search_crit' : search_crit,
     'filter_obj' : filter_obj,
     'eva_path' : eva_path,
+    'fileformat' : '.png',
     'system' : system,
 }
 

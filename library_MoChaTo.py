@@ -187,21 +187,35 @@ class PlotRule:
             plotaspects,
             aspectvalues
             ):
+        self.Nrule = 40
+        self.frule = 23
+        self.binnum = 30
         self.title = 'Plot title'
         self.xlabel = 'xlable'
         self.ylabel = 'ylable'
         self.xdata = 'q'
         self.ydata = 'S'
-        self.xlim = [0, 1]
-        self.ylim = [0, 1]
-        self.Nrule = 40
-        self.frule = 23
+        self.xlim = [1e-2, None]
+        self.ylim = [1e-4, None]
+        self.xscale = 'linear'
+        self.yscale = 'linear'
+        self.lw = 1.0
+        self.ls = '-'
+        self.color = 'dodgerblue'
+        self.marker='o'
+        self.ms = 3.5
         self.plotdomain = 'Kratky'
-        self.plot = 'graph'
+        self.plot = 'diag'
         self.seperate_plots = True
         self.legend = True
         self.legend_loc = 'upper right'
+        self.label = 'legend label'
 
+        # update attributes with values from plotaspects and aspectvalues
+        if len(plotaspects) != len(aspectvalues):
+            raise ValueError(
+                'Number of plot aspects and aspect values do not match!'
+            )
         for i in range(len(plotaspects)):
             setattr(self, f'{plotaspects[i]}', aspectvalues[i])
 
@@ -259,50 +273,147 @@ class PlotData:
         '''
         rule = self.rule
 
-        self.xdata = [getattr(obj, rule.xdata) for obj in dataobjs]
-
-
         if (rule.Nrule == 'all') and (rule.frule == 'all'):
-            ydata = [getattr(obj, rule.ydata) for obj in dataobjs]
+            data = [obj for obj in dataobjs]
         elif (rule.Nrule == 'all') or (rule.frule == 'all'):
-            ydata = [
-                getattr(obj, rule.ydata) for obj in dataobjs 
+            data = [
+                obj for obj in dataobjs 
                 if (obj.length in rule.Nrule) or (obj.f in rule.frule)
                 ]
         else:
-            ydata = [
-                getattr(obj, rule.ydata) for obj in dataobjs
+            data = [
+                obj for obj in dataobjs
                 if (obj.length in rule.Nrule) and (obj.f in rule.frule)
             ]
-        
-        self.ydata = ydata
+        self.data = data
 
-    def CreatePlot(self):
+    def CreatePlot(
+            self, eva_path:str=config['eva_path'], system:str=config['system']
+    ) -> None:
         '''
         Function to create plot with data objects in plot data object
         '''
         rule = self.rule
         if rule.seperate_plots:
-            for i in range(len(self.ydata)):
-                fig = plt.figure(figsize=(8, 6))            # create figure
-                ax = fig.add_subplot(1,1,1)                 # create subplot
+            # plot each FileData object in a seperate plot
+            for obj in self.data:
+                # create plot with data
+                fig = self.PlotSeperate(obj=obj)
+                
+                if system == 'windows':
+                    seperator = '\\'            # define seperator for windows 
+                                                # operating system
+                elif system == 'linux':
+                    seperator = '/'             # define seperator for linux
+                                                # operating system
+                else:
+                    raise ValueError(
+                        f'Input "{system}" for system not supported. '
+                        'Please set system to "windows" or "linux"'
+                    )
 
-                ydata = self.ydata[i]
-                xdata = self.xdata[i]
+                figpath = eva_path + seperator +'plots' + seperator +\
+                    rule.plot + '_' + rule.plotdomain + '_' + rule.ydata +\
+                    '-'+ rule.xdata + seperator + f'N_{obj.length}'
+                
+                save_plot(fig=fig, name=obj.condi, path=figpath)
+        else:
+            fig = self.PlotAll()
+        
+            if system == 'windows':
+                seperator = '\\'            # define seperator for windows 
+                                            # operating system
+            elif system == 'linux':
+                seperator = '/'             # define seperator for linux
+                                            # operating system
+            else:
+                raise ValueError(
+                    f'Input "{system}" for system not supported. '
+                    'Please set system to "windows" or "linux"'
+                )
 
-                if rule.plotdomain == 'Kratky':
-                    ydata = ydata*xdata**2
+            figpath = eva_path + seperator +'plots' + seperator +\
+                rule.plot + '_' + rule.plotdomain + '_' + rule.ydata +\
+                '-'+ rule.xdata + seperator + f'N_{obj.length}'
+            
+            save_plot(fig=fig, name=rule.title, path=figpath)
 
-                ax.plot(xdata, ydata)
+    def PlotSeperate(self, obj:FileData) -> plt.Figure:
+        '''
+        
+        '''
+        rule = self.rule
+
+        fig = plt.figure(figsize=(8, 6))            # create figure
+        ax = fig.add_subplot(1,1,1)                 # create subplot
+
+        # set title and axis labels
+        ax.set_title(rule.title)
+        ax.set_xlabel(rule.xlabel)
+        ax.set_ylabel(rule.ylabel)
+
+        # set plot cycle with aspects from PlotRule object
+        ax.set_prop_cycle(
+            color=rule.color,
+            linestyle=rule.ls,
+            lw=rule.lw,
+            marker=rule.marker,
+            ms=rule.ms
+        )
+
+        xdata = getattr(obj, rule.xdata)
+        ydata = getattr(obj, rule.ydata)
+
+        # plot data as diagram or histogram
+        if rule.plot == 'diag':
+            ax.set_xlim(left=rule.xlim[0], right=rule.xlim[1])
+            ax.set_ylim(bottom=rule.ylim[0], top=rule.ylim[1])
+            if rule.plotdomain == 'Kratky':
+                # plot data in Kratky plot
+                ydata = ydata*xdata**2
+                ax.loglog(xdata, ydata.T, label=rule.label)
+            else:
+                # plot data in normal plot
+                ax.plot(xdata, ydata.T, label=rule.label)
+                ax.set_xscale(rule.xscale)
+                ax.set_yscale(rule.yscale)
+        elif rule.plot == 'hist':
+            # create bins and plot data in histogram
+            bins = np.linspace(
+                np.min(ydata), np.max(ydata), rule.binnum
+            )
+            ax.hist(
+                ydata.flatten(), bins=bins, density=True,
+                color=rule.color, label=rule.label
+            )
+        else:
+            raise ValueError(
+                f'Plot type "{rule.plot}" not supported. '
+                'Please set plot to "diag" or "hist"'
+            )
+        return fig
+
+    def PlotAll(self) -> plt.Figure:
+        '''
+        
+        '''
+
+        rule = self.rule
+        fig = plt.figure(figsize=(8, 6))            # create figure
+        ax = fig.add_subplot(1,1,1)                 # create subplot
+
+        return fig
+
         
 
 
 
 
-def filter_func(name:str, file:h5py.File, NComps:int=config['NComps'],\
-                filter_obj:str=config['filter_obj'],\
-                eva_path:str=config['eva_path'], system:str=config['system'])\
-    -> None:
+def filter_func(
+        name:str, file:h5py.File, NComps:int=config['NComps'],
+        filter_obj:str=config['filter_obj'], eva_path:str=config['eva_path'], 
+        system:str=config['system']
+) -> None:
     '''
     Function to filter data groups in .hdf5 'input_file' that contain the
     string 'filter_obj' and perform data collection, evaluation and plotting
@@ -366,8 +477,10 @@ def filter_func(name:str, file:h5py.File, NComps:int=config['NComps'],\
         return None
 
     
-def save_plot(fig:plt.Figure, name:str, path:str, system:str=config['system'],\
-              fileformat:str='.png') -> None:
+def save_plot(
+        fig:plt.Figure, name:str, path:str, system:str=config['system'],
+        fileformat:str=config['fileformat']
+) -> None:
     '''
     Function to safe plot
 
