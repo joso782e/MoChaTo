@@ -83,23 +83,22 @@ class FileData(PCA):
         self.f = f
         self.q = q
         self.S = S
-        self.clmat = np.squeeze(np.asanyarray(clmat, dtype=np.int_))
-        print('all')
-        print(self.clmat[:,:,:])
-        print('page2')
-        print(self.clmat[:,:,1])
-        print('page3')
-        print(self.clmat[:,:,2])
+        self.clmat = np.asanyarray(clmat, dtype=np.int_)
         self.mS = np.mean(S, axis=0)
         self.empvar = np.var(S, axis=0)/self.mS**2
         ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
-        self.ll = ll
-        print('ll')
+        ll = np.split(ll, indices_or_sections=ll.shape[0], axis=0)
+        print(len(ll))
+        self.ll = np.apply_along_axis(
+            lambda y: y[np.nonzero(y)], axis=0, arr=ll
+        )
         print(self.ll)
-        self.mll = np.mean(self.ll, axis=1)
+        self.mll = np.apply_along_axis(
+            lambda y: np.mean(y), axis=0., arr=self.ll
+        )
         self.fit(self.S)
         self.PCspaceS = self.transform(self.S)
-        self.per_recon()
+        self.Per_Recon()
 
     @staticmethod
     def ExtractFileData(file:h5py.File, path:str, filter_obj:str, ncomps:int):
@@ -149,7 +148,7 @@ class FileData(PCA):
                         f=InterconDens, q=qKey, S=SData,\
                         clmat=crosslinks)
     
-    def per_recon(self) -> None:
+    def Per_Recon(self) -> None:
         '''
         Function to calculate reconstructed date and related quantities from
         PCA
@@ -176,6 +175,128 @@ class FileData(PCA):
         setattr(self, 'mrevar', mrevar)     # set variance of relative mean
                                             # error
         setattr(self, 'revar', revar)       # set variance of relative error
+
+
+class PlotRule:
+    '''
+    Class to create plot rules 
+    '''
+
+    def __init__(
+            self,
+            plotaspects,
+            aspectvalues
+            ):
+        self.title = 'Plot title'
+        self.xlabel = 'xlable'
+        self.ylabel = 'ylable'
+        self.xdata = 'q'
+        self.ydata = 'S'
+        self.xlim = [0, 1]
+        self.ylim = [0, 1]
+        self.Nrule = 40
+        self.frule = 23
+        self.plotdomain = 'Kratky'
+        self.plot = 'graph'
+        self.seperate_plots = True
+        self.legend = True
+        self.legend_loc = 'upper right'
+
+        for i in range(len(plotaspects)):
+            setattr(self, f'{plotaspects[i]}', aspectvalues[i])
+
+
+class PlotData:
+
+    def __init__(
+            self,
+            plotaspects:list,
+            aspectvalues:list,
+            dataobjs:list[FileData]
+    ):
+        self.rule = PlotRule(
+            plotaspects=plotaspects,
+            aspectvalues=aspectvalues
+        )
+
+        if not (self.rule.Nrule in [obj.length for obj in dataobjs]):
+            raise ValueError(
+                f'Rule "N = {self.rule.Nrule}" not in data objects. '
+                 'Please set Nrule to one of the following values:'
+                f'\n{np.unique([obj.length for obj in dataobjs])}'
+            )
+        
+        if not (self.rule.frule in [obj.f for obj in dataobjs]):
+            raise ValueError(
+                f'Rule "f = {self.rule.frule}" not in data objects. '
+                 'Please set frule to one of the following values:'
+                f'\n{np.unique([obj.f for obj in dataobjs])}'
+            )
+        
+        if not (self.rule.xdata in dir(dataobjs[0])):
+            raise AttributeError(
+                f'Rule "xdata = {self.rule.xdata}" not as attribute in '
+                 'FileData objects. Please set xdata to one of the following '
+                 'values:'
+                f'\n{dir(dataobjs[0])}'
+                '\nor to "c1"/"c2" for principal component 1/2'
+            )
+        
+        if not (self.rule.ydata in dir(dataobjs[0])):
+            raise AttributeError(
+                f'Rule "ydata = {self.rule.ydata}" not as attribute in '
+                 'FileData objects. Please set ydata to one of the following '
+                 'values:'
+                f'\n{dir(dataobjs[0])}'
+                '\nor to "c1"/"c2" for principal component 1/2'
+            )
+
+        self.SetData(dataobjs=dataobjs)
+    
+    def SetData(self, dataobjs:list[FileData]) -> None:
+        '''
+        Function to update data attributes in PlotData object
+        '''
+        rule = self.rule
+
+        self.xdata = [getattr(obj, rule.xdata) for obj in dataobjs]
+
+
+        if (rule.Nrule == 'all') and (rule.frule == 'all'):
+            ydata = [getattr(obj, rule.ydata) for obj in dataobjs]
+        elif (rule.Nrule == 'all') or (rule.frule == 'all'):
+            ydata = [
+                getattr(obj, rule.ydata) for obj in dataobjs 
+                if (obj.length in rule.Nrule) or (obj.f in rule.frule)
+                ]
+        else:
+            ydata = [
+                getattr(obj, rule.ydata) for obj in dataobjs
+                if (obj.length in rule.Nrule) and (obj.f in rule.frule)
+            ]
+        
+        self.ydata = ydata
+
+    def CreatePlot(self):
+        '''
+        Function to create plot with data objects in plot data object
+        '''
+        rule = self.rule
+        if rule.seperate_plots:
+            for i in range(len(self.ydata)):
+                fig = plt.figure(figsize=(8, 6))            # create figure
+                ax = fig.add_subplot(1,1,1)                 # create subplot
+
+                ydata = self.ydata[i]
+                xdata = self.xdata[i]
+
+                if rule.plotdomain == 'Kratky':
+                    ydata = ydata*xdata**2
+
+                ax.plot(xdata, ydata)
+        
+
+
 
 
 def filter_func(name:str, file:h5py.File, NComps:int=config['NComps'],\

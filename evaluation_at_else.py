@@ -19,7 +19,7 @@ TestRun = True                  # set to True if only a test run is needed:
 
 system = 'windows'              # clearify operating systsem for file handling
 if system == 'windows':
-    seperator = '\\'            # define seperator for windows 
+    seperator = '\\\\'            # define seperator for windows 
                                 # operating system
 elif system == 'linux':
     seperator = '/'             # define seperator for linux
@@ -29,11 +29,11 @@ elif system == 'linux':
 # root directory of the project
 root_dir = '.'
 # search criteria for .hdf5 files
-search_crit = root_dir + '\\**\\*.hdf5'.replace('\\', seperator)
+search_crit = root_dir + '\\**\\*.hdf5'.replace('\\\\', seperator)
 
 
 filter_obj = 'swell_sqiso_key'
-eva_path = root_dir + '\\script_evaluation'.replace('\\', seperator)
+eva_path = root_dir + '.\\data_evaluation\\script_evaluation'.replace('\\\\', seperator)
 
 
 config = {
@@ -49,7 +49,7 @@ config = {
 import json
 
 with open(
-    '.\data_evaluation\Scripts\config.json'.replace('\\', seperator),
+    '.\\data_evaluation\\Scripts\config.json'.replace('\\\\', seperator),
     'w') as configf:
     json.dump(config, configf)
 
@@ -113,7 +113,7 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
             lib.plot_data_qspace(DataObj=DataObj)
             
             # plot histogramm of loop length, problem: data to large
-            # lib.plot_ll_hist(DataObj=DataObj)
+            lib.plot_ll_hist(DataObj=DataObj)
 
             # plot histogramm of mean loop length
             lib.plot_mll_hist(DataObj=DataObj)
