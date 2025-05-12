@@ -13,6 +13,7 @@ from os.path import exists
 import json
 import h5py
 import numpy as np
+import scipy.optimize as opt
 from sklearn.decomposition import PCA
 from matplotlib import colormaps as cm
 import matplotlib.pyplot as plt
@@ -80,7 +81,7 @@ class FileData(PCA):
         )
         self.condi = condi
         self.length = length
-        self.f = f
+        self.f = 1/f
         self.q = q
         self.S = S
         self.clmat = np.asanyarray(clmat, dtype=np.int_)
@@ -175,6 +176,23 @@ class FileData(PCA):
         setattr(self, 'mrevar', mrevar)     # set variance of relative mean
                                             # error
         setattr(self, 'revar', revar)       # set variance of relative error
+    
+    def PerfFit(self, FitFunc, xdata, ydata, xerr, yerr, fitname) -> None:
+        '''
+        Function to calculate fit of data to chosen curve
+        '''
+        xdata = getattr(self, xdata)
+        ydata = getattr(self, ydata)
+
+        fit = np.apply_along_axis(
+            lambda y: opt.curve_fit(
+                FitFunc, xdata, y, sigma=yerr, absolute_sigma=True
+            ),
+            axis=0,
+            arr=ydata
+        )
+
+        setattr(self, fitname, fit)
 
 
 class PlotRule:
@@ -240,7 +258,7 @@ class PlotData:
                 f'\n{np.unique([obj.length for obj in dataobjs])}'
             )
         
-        if not (self.rule.frule in [obj.f for obj in dataobjs]):
+        if not (self.rule.frule in [1/obj.f for obj in dataobjs]):
             raise ValueError(
                 f'Rule "f = {self.rule.frule}" not in data objects. '
                  'Please set frule to one of the following values:'
@@ -278,12 +296,12 @@ class PlotData:
         elif (rule.Nrule == 'all') or (rule.frule == 'all'):
             data = [
                 obj for obj in dataobjs 
-                if (obj.length in rule.Nrule) or (obj.f in rule.frule)
+                if (obj.length in rule.Nrule) or (1/obj.f in rule.frule)
                 ]
         else:
             data = [
                 obj for obj in dataobjs
-                if (obj.length in rule.Nrule) and (obj.f in rule.frule)
+                if (obj.length in rule.Nrule) and (1/obj.f in rule.frule)
             ]
         self.data = data
 
@@ -318,7 +336,7 @@ class PlotData:
                 
                 save_plot(fig=fig, name=obj.condi, path=figpath)
         else:
-            fig = self.PlotAll()
+            fig = self.PlotAllInOne()
         
             if system == 'windows':
                 seperator = '\\'            # define seperator for windows 
@@ -393,15 +411,35 @@ class PlotData:
             )
         return fig
 
-    def PlotAll(self) -> plt.Figure:
+    def PlotAllInOne(self) -> plt.Figure:
         '''
         
         '''
 
         rule = self.rule
+
         fig = plt.figure(figsize=(8, 6))            # create figure
         ax = fig.add_subplot(1,1,1)                 # create subplot
 
+        # set title and axis labels
+        ax.set_title(rule.title)
+        ax.set_xlabel(rule.xlabel)
+        ax.set_ylabel(rule.ylabel)
+
+        # set plot cycle with aspects from PlotRule object
+        ax.set_prop_cycle(
+            color=rule.color,
+            linestyle=rule.ls,
+            lw=rule.lw,
+            marker=rule.marker,
+            ms=rule.ms
+        )
+
+        xdata = []
+        ydata = []
+
+        if 
+            
         return fig
 
         

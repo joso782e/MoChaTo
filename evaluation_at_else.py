@@ -47,6 +47,14 @@ config = {
     'system' : system,
 }
 
+
+def FitGyraRad(x, a, b):
+    '''
+    Function for fitting radii of gyration to form factor 
+    '''
+    return a - b*x**2
+
+
 import json
 
 with open(
