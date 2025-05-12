@@ -52,7 +52,7 @@ class FileData(PCA):
     def __init__(
         self,
         condi:str,
-        length:int,
+        N:int,
         f:int,
         q:np.ndarray,
         S:np.ndarray,
@@ -80,7 +80,7 @@ class FileData(PCA):
             random_state=random_state,
         )
         self.condi = condi
-        self.length = length
+        self.N = N
         self.f = 1/f
         self.q = q
         self.S = S
@@ -89,11 +89,9 @@ class FileData(PCA):
         self.empvar = np.var(S, axis=0)/self.mS**2
         ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
         ll = np.split(ll, indices_or_sections=ll.shape[0], axis=0)
-        print(len(ll))
         self.ll = np.apply_along_axis(
             lambda y: y[np.nonzero(y)], axis=0, arr=ll
         )
-        print(self.ll)
         self.mll = np.apply_along_axis(
             lambda y: np.mean(y), axis=0., arr=self.ll
         )
@@ -145,7 +143,7 @@ class FileData(PCA):
         # get crosslink matrix
         crosslinks = file[path[:-l]+'crosslinks']
 
-        return FileData(n_components=ncomps, condi=Cond, length=NChain,\
+        return FileData(n_components=ncomps, condi=Cond, N=NChain,\
                         f=InterconDens, q=qKey, S=SData,\
                         clmat=crosslinks)
     
@@ -213,8 +211,8 @@ class PlotRule:
         self.ylabel = 'ylable'
         self.xdata = 'q'
         self.ydata = 'S'
-        self.xlim = [1e-2, None]
-        self.ylim = [1e-4, None]
+        self.xlim = [None, None]
+        self.ylim = [None, None]
         self.xscale = 'linear'
         self.yscale = 'linear'
         self.lw = 1.0
@@ -225,6 +223,7 @@ class PlotRule:
         self.plotdomain = 'Kratky'
         self.plot = 'diag'
         self.seperate_plots = True
+        self.sortby = 'N'
         self.legend = True
         self.legend_loc = 'upper right'
         self.label = 'legend label'
@@ -251,18 +250,26 @@ class PlotData:
             aspectvalues=aspectvalues
         )
 
-        if not (self.rule.Nrule in [obj.length for obj in dataobjs]):
+        if (
+            (self.rule.Nrule in [obj.N for obj in dataobjs]) or
+            (self.rule.Nrule != 'all')
+            ):
             raise ValueError(
                 f'Rule "N = {self.rule.Nrule}" not in data objects. '
-                 'Please set Nrule to one of the following values:'
-                f'\n{np.unique([obj.length for obj in dataobjs])}'
+                 'Please set Nrule to one or a list of the following values:'
+                f'\n{np.unique([obj.N for obj in dataobjs])}'
+                 '\nor to "all"'
             )
         
-        if not (self.rule.frule in [1/obj.f for obj in dataobjs]):
+        if (
+            (self.rule.frule in [1/obj.f for obj in dataobjs]) or
+            (self.rule.frule != 'all')
+        ):
             raise ValueError(
                 f'Rule "f = {self.rule.frule}" not in data objects. '
                  'Please set frule to one of the following values:'
                 f'\n{np.unique([obj.f for obj in dataobjs])}'
+                 '\nor to "all"'
             )
         
         if not (self.rule.xdata in dir(dataobjs[0])):
@@ -282,6 +289,12 @@ class PlotData:
                 f'\n{dir(dataobjs[0])}'
                 '\nor to "c1"/"c2" for principal component 1/2'
             )
+        
+        if (self.rule.sortby != 'N' or self.rule.sortby != 'f'):
+            raise ValueError(
+                f'Input "{self.rule.sortby}" for sortby not supported. '
+                'Please set sortby to "N" or "f"'
+            )        
 
         self.SetData(dataobjs=dataobjs)
     
@@ -291,18 +304,17 @@ class PlotData:
         '''
         rule = self.rule
 
-        if (rule.Nrule == 'all') and (rule.frule == 'all'):
-            data = [obj for obj in dataobjs]
-        elif (rule.Nrule == 'all') or (rule.frule == 'all'):
-            data = [
-                obj for obj in dataobjs 
-                if (obj.length in rule.Nrule) or (1/obj.f in rule.frule)
-                ]
-        else:
-            data = [
-                obj for obj in dataobjs
-                if (obj.length in rule.Nrule) and (1/obj.f in rule.frule)
-            ]
+        if rule.Nrule == 'all':
+            rule.Nrule = np.unique([obj.N for obj in dataobjs])
+
+        if rule.frule == 'all':
+            rule.frule = np.unique([1/obj.f for obj in dataobjs])
+
+        data = [
+            obj for obj in dataobjs
+            if (obj.N in rule.Nrule) and (1/obj.f in rule.frule)
+        ]
+
         self.data = data
 
     def CreatePlot(
@@ -332,7 +344,7 @@ class PlotData:
 
                 figpath = eva_path + seperator +'plots' + seperator +\
                     rule.plot + '_' + rule.plotdomain + '_' + rule.ydata +\
-                    '-'+ rule.xdata + seperator + f'N_{obj.length}'
+                    '-'+ rule.xdata + seperator + f'N_{obj.N}'
                 
                 save_plot(fig=fig, name=obj.condi, path=figpath)
         else:
@@ -352,7 +364,7 @@ class PlotData:
 
             figpath = eva_path + seperator +'plots' + seperator +\
                 rule.plot + '_' + rule.plotdomain + '_' + rule.ydata +\
-                '-'+ rule.xdata + seperator + f'N_{obj.length}'
+                '-'+ rule.xdata + seperator + f'N_{obj.N}'
             
             save_plot(fig=fig, name=rule.title, path=figpath)
 
@@ -380,7 +392,8 @@ class PlotData:
         )
 
         xdata = getattr(obj, rule.xdata)
-        ydata = getattr(obj, rule.ydata)
+        ydata = [getattr(obj, r) for r in rule.ydata]
+        ydata = np.asarray(ydata)
 
         # plot data as diagram or histogram
         if rule.plot == 'diag':
@@ -415,7 +428,6 @@ class PlotData:
         '''
         
         '''
-
         rule = self.rule
 
         fig = plt.figure(figsize=(8, 6))            # create figure
@@ -438,7 +450,46 @@ class PlotData:
         xdata = []
         ydata = []
 
-        if 
+        for i in getattr(rule, f'{rule.sortby}rule'):
+            xdata.append([
+                getattr(obj, rule.xdata) for obj in self.data
+                if getattr(obj, rule.sortby) == i
+            ])
+            ydata.append([
+                getattr(obj, rule.ydata) for obj in self.data
+                if getattr(obj, rule.sortby) == i
+            ])
+
+        xdata = np.asanyarray(xdata)
+        ydata = np.asanyarray(ydata)
+        
+        # plot data as diagram or histogram
+        if rule.plot == 'diag':
+            ax.set_xlim(left=rule.xlim[0], right=rule.xlim[1])
+            ax.set_ylim(bottom=rule.ylim[0], top=rule.ylim[1])
+            if rule.plotdomain == 'Kratky':
+                # plot data in Kratky plot
+                ydata = ydata*xdata**2
+                ax.loglog(xdata, ydata.T, label=rule.label)
+            else:
+                # plot data in normal plot
+                ax.plot(xdata, ydata.T, label=rule.label)
+                ax.set_xscale(rule.xscale)
+                ax.set_yscale(rule.yscale)
+        elif rule.plot == 'hist':
+            # create bins and plot data in histogram
+            bins = np.linspace(
+                np.min(ydata), np.max(ydata), rule.binnum
+            )
+            ax.hist(
+                ydata.flatten(), bins=bins, density=True,
+                color=rule.color, label=rule.label
+            )
+        else:
+            raise ValueError(
+                f'Plot type "{rule.plot}" not supported. '
+                'Please set plot to "diag" or "hist"'
+            )
             
         return fig
 

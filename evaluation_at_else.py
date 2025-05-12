@@ -47,6 +47,31 @@ config = {
     'system' : system,
 }
 
+Nrule = 40
+frule = 23
+binnum = 30
+title = 'Plot title'
+xlabel = 'xlable'
+ylabel = 'ylable'
+xdata = 'q'
+ydata = 'S'
+xlim = [1e-2, None]
+ylim = [1e-4, None]
+xscale = 'linear'
+yscale = 'linear'
+lw = 1.0
+ls = '-'
+color = 'dodgerblue'
+marker='o'
+ms = 3.5
+plotdomain = 'Kratky'
+plot = 'diag'
+seperate_plots = True
+sortby = 'N'
+legend = True
+legend_loc = 'upper right'
+label = 'legend label'
+
 
 def FitGyraRad(x, a, b):
     '''
