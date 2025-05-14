@@ -87,14 +87,7 @@ class FileData(PCA):
         self.clmat = np.asanyarray(clmat, dtype=np.int_)
         self.mS = np.mean(S, axis=0)
         self.empvar = np.var(S, axis=0)/self.mS**2
-        ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
-        ll = np.split(ll, indices_or_sections=ll.shape[0], axis=0)
-        self.ll = np.apply_along_axis(
-            lambda y: y[np.nonzero(y)], axis=0, arr=ll
-        )
-        self.mll = np.apply_along_axis(
-            lambda y: np.mean(y), axis=0., arr=self.ll
-        )
+        self.LLCalc()
         self.fit(self.S)
         self.PCspaceS = self.transform(self.S)
         self.Per_Recon()
@@ -175,22 +168,51 @@ class FileData(PCA):
                                             # error
         setattr(self, 'revar', revar)       # set variance of relative error
     
+    def LLCalc(self) -> None:
+        '''
+        
+        '''
+        ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
+        ll = np.split(ll, indices_or_sections=ll.shape[0], axis=0)
+        self.ll = np.apply_along_axis(
+            lambda y: y[np.nonzero(y)], axis=0, arr=ll
+        )
+        self.mll = np.apply_along_axis(
+            lambda y: np.mean(y), axis=0., arr=self.ll
+        )
+    
     def PerfFit(self, FitFunc, xdata, ydata, xerr, yerr, fitname) -> None:
         '''
-        Function to calculate fit of data to chosen curve
+        Funktion to calculate quantities from fit to data
+        updates self with new attributes as follows:
+        - self.{fitname}{i} fitted values
+        - self.{fitname}err{i} uncertainty of fitted values
+        for i = 0, ..., n-1  fit parameters
         '''
         xdata = getattr(self, xdata)
         ydata = getattr(self, ydata)
 
-        fit = np.apply_along_axis(
-            lambda y: opt.curve_fit(
-                FitFunc, xdata, y, sigma=yerr, absolute_sigma=True
-            ),
-            axis=0,
-            arr=ydata
-        )
+        for i in range(ydata.shape[0]):
+            fit, cov = opt.curve_fit(
+                FitFunc, xdata=xdata, ydata=ydata[i,:], sigma=yerr
+            )
 
-        setattr(self, fitname, fit)
+            if i == 0:
+                for j in range(len(fit)):
+                    err = 
+
+                    setattr(self, f'{fitname}{j}', fit[j])
+                    setattr(self, f'{fitname}err{j}', err)
+            else:
+                for j in range(len(fit)):
+                    f = getattr(self, f'{fitname}{j}')
+                    err = getattr(self, f'{fitname}err{j}')
+
+                    f.append(fit[j])
+                    err.append()
+
+                    setattr(self, f'{fitname}{j}', f)
+                    setattr(self, f'{fitname}err{j}', err)
 
 
 class PlotRule:
@@ -494,10 +516,6 @@ class PlotData:
         return fig
 
         
-
-
-
-
 def filter_func(
         name:str, file:h5py.File, NComps:int=config['NComps'],
         filter_obj:str=config['filter_obj'], eva_path:str=config['eva_path'], 
