@@ -47,37 +47,39 @@ config = {
     'system' : system,
 }
 
-Nrule = 40
-frule = 23
-binnum = 30
-title = 'Plot title'
-xlabel = 'xlable'
-ylabel = 'ylable'
-xdata = 'q'
-ydata = 'S'
-xlim = [1e-2, None]
-ylim = [1e-4, None]
-xscale = 'linear'
-yscale = 'linear'
-lw = 1.0
-ls = '-'
-color = 'dodgerblue'
-marker='o'
-ms = 3.5
-plotdomain = 'Kratky'
-plot = 'diag'
-seperate_plots = True
-sortby = 'N'
-legend = True
-legend_loc = 'upper right'
-label = 'legend label'
+plotaspects = {
+    'Nrule' : [40],
+    'frule' : [1/23],
+    'binnum' : 30,
+    'title' : 'Plot title',
+    'xlabel' : 'xlable',
+    'ylabel' : 'ylable',
+    'xdata' : 'q',
+    'ydata' : 'S',
+    'xlim' : [1e-2, None],
+    'ylim' : [1e-4, None],
+    'xscale' : 'linear',
+    'yscale' : 'linear',
+    'scalfac' : 1.0,
+    'lw' : [1.0],
+    'ls' : ['-'],
+    'color' : ['dodgerblue'],
+    'marker' :['o'],
+    'ms' : [3.5],
+    'plotdomain' : 'Kratky',
+    'plot' : 'diag',
+    'sortby' : 'N',
+    'legend' : True,
+    'legend_loc' : 'upper right',
+    'label' : 'legend label'
+}
 
 
-def FitGyraRad(x, a, b):
+def FitGyraRad(x, a0, a1):
     '''
     Function for fitting radii of gyration to form factor 
     '''
-    return a - b*x**2
+    return a0 - 1/3*(a1*x)**2
 
 
 import json
@@ -131,84 +133,22 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         
     DataObjs = [obj for obj in DataObjs if obj is not None]     # remove None
 
-    for DataObj in DataObjs:
-        if not TestRun:
-            # plot principle components in q-space
-            lib.plot_princ_comps(DataObj=DataObj)
+    for obj in DataObjs:
+        # perform fit for radii of gyration
+        obj.PerfFit(FitGyraRad, 'q', 'S', 'Rg')
+    
+    plotaspects['title'] = 'Radii of gyration vs. PC1'
+    plotaspects['xlabel'] = r'$c_1$'
+    plotaspects['ylabel'] = r'$R_g$'
+    plotaspects['xdata'] = 'c1'
+    plotaspects['ydata'] = 'Rg1'
+    plotaspects['xlim'] = [None, None]
+    plotaspects['ylim'] = [None, None]
+    plotaspects['ls'] = ['None']
+    plotaspects['plotdomain'] = 'PCspace'
+    plotaspects['legend'] = False
 
-            # plot structural factor in PC-space
-            lib.plot_data_PCspace(DataObj=DataObj)
-
-            # plot reconstruction error in q-space
-            lib.plot_recon_error(DataObj=DataObj)
-
-            # plot example curves, reconstructed curves and mean curve in
-            # q-space
-            lib.plot_data_qspace(DataObj=DataObj)
-            
-            # plot histogramm of loop length, problem: data to large
-            lib.plot_ll_hist(DataObj=DataObj)
-
-            # plot histogramm of mean loop length
-            lib.plot_mll_hist(DataObj=DataObj)
-
-            # plot mean loop length against c1
-            lib.plot_mll_vs_ci(DataObj=DataObj, i=1)
-
-            # plot mean loop length against c2
-            lib.plot_mll_vs_ci(DataObj=DataObj, i=2)
-
-
-    # get different f for each chain length
-    fn40 = [obj.f for obj in DataObjs if obj.length == 40]
-    fn100 = [obj.f for obj in DataObjs if obj.length == 100]
-    fn200 = [obj.f for obj in DataObjs if obj.length == 200]
-
-    # get different root-mean-square reconstruction error for each chain length
-    ren40 = [obj.mre for obj in DataObjs if obj.length == 40]
-    ren100 = [obj.mre for obj in DataObjs if obj.length == 100]
-    ren200 = [obj.mre for obj in DataObjs if obj.length == 200]
-
-    # varianze of reconstruction error for each chain length
-    var40 = [np.sqrt(obj.mrevar) for obj in DataObjs if obj.length == 40]
-    var100 = [np.sqrt(obj.mrevar) for obj in DataObjs if obj.length == 100]
-    var200 = [np.sqrt(obj.mrevar) for obj in DataObjs if obj.length == 200]
-
-    # important parameters for plotting e_S
-    fmin = 1.05*np.min([np.min(fn40), np.min(fn100), np.min(fn200)])\
-            - 0.05*np.max([np.max(fn40), np.max(fn100), np.max(fn200)])
-    fmax = 1.05*np.max([np.max(fn40), np.max(fn100), np.max(fn200)])\
-            - 0.05*np.min([np.min(fn40), np.min(fn100), np.min(fn200)])
-    remin = 1.05*np.min([np.min(ren40), np.min(ren100), np.min(ren200)])\
-            - 0.05*np.max([np.max(ren40), np.max(ren100), np.max(ren200)])
-    remax = 1.05*np.max([np.max(ren40), np.max(ren100), np.max(ren200)])\
-            - 0.05*np.min([np.min(ren40), np.min(ren100), np.min(ren200)])
-
-
-    # plot mean reconstruction error depending on interconnection error
-    fig = plt.figure(figsize=(8, 6))                # create figure
-    ax = fig.add_subplot(1, 1, 1)                   # add subplot
-    # ax.axis([fmin, fmax, remin, remax])             # set axis limits
-
-    ax.set_title(r'Relative mean reconstruction error depending on interconnection density')
-    ax.set_xlabel(r'f')
-    ax.set_ylabel(r'$\langle e_S\rangle$')
-
-    ax.errorbar(1/np.array(fn40), ren40, yerr=var40, errorevery=(0, 3),\
-                ls='None', marker='o', ms=3.5, mfc='dodgerblue',\
-                mec='dodgerblue', label=r'$n=40$')
-    ax.errorbar(1/np.array(fn100), ren100, yerr=var100, errorevery=(0, 3),\
-                ls='None', marker='o', ms=3.5, mfc='tomato', mec='tomato',\
-                label=r'$n=100$')
-    ax.errorbar(1/np.array(fn200), ren200, yerr=var200, errorevery=(1, 3),\
-                ls='None', marker='o', ms=3.5, mfc='springgreen',\
-                mec='springgreen', label=r'$n=200$')
-
-    ax.legend(loc='upper right')            # set legend position
-
-
-    lib.save_plot(fig=fig, name='mean_recon_error',\
-                  path=eva_path+seperator+'plots', system=system)
-
+    gyraplot = lib.PlotData(plotaspects, DataObjs)
+    gyraplot.CreatePlot()
 
 print('Evaluation finished')

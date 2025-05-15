@@ -170,18 +170,14 @@ class FileData(PCA):
     
     def LLCalc(self) -> None:
         '''
-        
+        Function to calculate loop length an mean loop length from crosslink matrix
         '''
         ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
         ll = np.split(ll, indices_or_sections=ll.shape[0], axis=0)
-        self.ll = np.apply_along_axis(
-            lambda y: y[np.nonzero(y)], axis=0, arr=ll
-        )
-        self.mll = np.apply_along_axis(
-            lambda y: np.mean(y), axis=0., arr=self.ll
-        )
+        self.ll = [l[np.nonzero(l)] for l in ll]
+        self.mll = np.array([np.mean(l) for l in self.ll])
     
-    def PerfFit(self, FitFunc, xdata, ydata, xerr, yerr, fitname) -> None:
+    def PerfFit(self, FitFunc, xdata, ydata, fitname) -> None:
         '''
         Funktion to calculate quantities from fit to data
         updates self with new attributes as follows:
@@ -193,26 +189,21 @@ class FileData(PCA):
         ydata = getattr(self, ydata)
 
         for i in range(ydata.shape[0]):
-            fit, cov = opt.curve_fit(
-                FitFunc, xdata=xdata, ydata=ydata[i,:], sigma=yerr
+            fit, _ = opt.curve_fit(
+                FitFunc, xdata=xdata, ydata=ydata[i,:]
             )
 
             if i == 0:
                 for j in range(len(fit)):
-                    err = 
-
-                    setattr(self, f'{fitname}{j}', fit[j])
-                    setattr(self, f'{fitname}err{j}', err)
+                    
+                    setattr(self, f'{fitname}{j}', [fit[j]])
             else:
                 for j in range(len(fit)):
                     f = getattr(self, f'{fitname}{j}')
-                    err = getattr(self, f'{fitname}err{j}')
 
                     f.append(fit[j])
-                    err.append()
 
                     setattr(self, f'{fitname}{j}', f)
-                    setattr(self, f'{fitname}err{j}', err)
 
 
 class PlotRule:
@@ -222,12 +213,12 @@ class PlotRule:
 
     def __init__(
             self,
-            plotaspects,
-            aspectvalues
+            plotaspects:dict
             ):
         self.Nrule = 40
-        self.frule = 23
+        self.frule = 1/23
         self.binnum = 30
+        self.figsize = (8, 6)
         self.title = 'Plot title'
         self.xlabel = 'xlable'
         self.ylabel = 'ylable'
@@ -237,6 +228,7 @@ class PlotRule:
         self.ylim = [None, None]
         self.xscale = 'linear'
         self.yscale = 'linear'
+        self.scalfac = 1.0
         self.lw = 1.0
         self.ls = '-'
         self.color = 'dodgerblue'
@@ -244,19 +236,14 @@ class PlotRule:
         self.ms = 3.5
         self.plotdomain = 'Kratky'
         self.plot = 'diag'
-        self.seperate_plots = True
         self.sortby = 'N'
         self.legend = True
         self.legend_loc = 'upper right'
         self.label = 'legend label'
 
         # update attributes with values from plotaspects and aspectvalues
-        if len(plotaspects) != len(aspectvalues):
-            raise ValueError(
-                'Number of plot aspects and aspect values do not match!'
-            )
-        for i in range(len(plotaspects)):
-            setattr(self, f'{plotaspects[i]}', aspectvalues[i])
+        for i in plotaspects.keys():
+            setattr(self, f'{i}', plotaspects[i])
 
 
 class PlotData:
@@ -264,15 +251,11 @@ class PlotData:
     def __init__(
             self,
             plotaspects:list,
-            aspectvalues:list,
             dataobjs:list[FileData]
     ):
-        self.rule = PlotRule(
-            plotaspects=plotaspects,
-            aspectvalues=aspectvalues
-        )
+        self.rule = PlotRule(plotaspects=plotaspects)
 
-        if (
+        if not (
             (self.rule.Nrule in [obj.N for obj in dataobjs]) or
             (self.rule.Nrule != 'all')
             ):
@@ -283,36 +266,45 @@ class PlotData:
                  '\nor to "all"'
             )
         
-        if (
-            (self.rule.frule in [1/obj.f for obj in dataobjs]) or
+        if not (
+            (self.rule.frule in [obj.f for obj in dataobjs]) or
             (self.rule.frule != 'all')
         ):
             raise ValueError(
                 f'Rule "f = {self.rule.frule}" not in data objects. '
-                 'Please set frule to one of the following values:'
-                f'\n{np.unique([obj.f for obj in dataobjs])}'
+                 'Please set frule to one or a list of one over the following '
+                 'values:'
+                f'\n{np.unique([int(1/obj.f) for obj in dataobjs])}'
                  '\nor to "all"'
             )
         
-        if not (self.rule.xdata in dir(dataobjs[0])):
+        if not (
+            self.rule.xdata in dir(dataobjs[0]) or
+            self.rule.xdata in ['c1', 'c2', 'PC1', 'PC2']
+            ):
             raise AttributeError(
                 f'Rule "xdata = {self.rule.xdata}" not as attribute in '
                  'FileData objects. Please set xdata to one of the following '
                  'values:'
                 f'\n{dir(dataobjs[0])}'
-                '\nor to "c1"/"c2" for principal component 1/2'
+                '\n,to "c1"/"c2" for coordinate 1/2 in PC-space '
+                'or to "PC1"/"PC2" for principal component 1/2'
             )
         
-        if not (self.rule.ydata in dir(dataobjs[0])):
+        if not (
+            self.rule.ydata in dir(dataobjs[0]) or
+            self.rule.ydata in ['c1', 'c2', 'PC1', 'PC2']
+            ):
             raise AttributeError(
                 f'Rule "ydata = {self.rule.ydata}" not as attribute in '
                  'FileData objects. Please set ydata to one of the following '
                  'values:'
                 f'\n{dir(dataobjs[0])}'
-                '\nor to "c1"/"c2" for principal component 1/2'
+                '\n, to "c1"/"c2" for coordinate 1/2 in PC-space '
+                'or to "PC1"/"PC2" for principal component 1/2'
             )
         
-        if (self.rule.sortby != 'N' or self.rule.sortby != 'f'):
+        if not (self.rule.sortby == 'N' or self.rule.sortby == 'f'):
             raise ValueError(
                 f'Input "{self.rule.sortby}" for sortby not supported. '
                 'Please set sortby to "N" or "f"'
@@ -330,11 +322,11 @@ class PlotData:
             rule.Nrule = np.unique([obj.N for obj in dataobjs])
 
         if rule.frule == 'all':
-            rule.frule = np.unique([1/obj.f for obj in dataobjs])
+            rule.frule = np.unique([obj.f for obj in dataobjs])
 
         data = [
             obj for obj in dataobjs
-            if (obj.N in rule.Nrule) and (1/obj.f in rule.frule)
+            if (obj.N in rule.Nrule) and (obj.f in rule.frule)
         ]
 
         self.data = data
@@ -343,117 +335,47 @@ class PlotData:
             self, eva_path:str=config['eva_path'], system:str=config['system']
     ) -> None:
         '''
-        Function to create plot with data objects in plot data object
-        '''
-        rule = self.rule
-        if rule.seperate_plots:
-            # plot each FileData object in a seperate plot
-            for obj in self.data:
-                # create plot with data
-                fig = self.PlotSeperate(obj=obj)
-                
-                if system == 'windows':
-                    seperator = '\\'            # define seperator for windows 
-                                                # operating system
-                elif system == 'linux':
-                    seperator = '/'             # define seperator for linux
-                                                # operating system
-                else:
-                    raise ValueError(
-                        f'Input "{system}" for system not supported. '
-                        'Please set system to "windows" or "linux"'
-                    )
-
-                figpath = eva_path + seperator +'plots' + seperator +\
-                    rule.plot + '_' + rule.plotdomain + '_' + rule.ydata +\
-                    '-'+ rule.xdata + seperator + f'N_{obj.N}'
-                
-                save_plot(fig=fig, name=obj.condi, path=figpath)
-        else:
-            fig = self.PlotAllInOne()
-        
-            if system == 'windows':
-                seperator = '\\'            # define seperator for windows 
-                                            # operating system
-            elif system == 'linux':
-                seperator = '/'             # define seperator for linux
-                                            # operating system
-            else:
-                raise ValueError(
-                    f'Input "{system}" for system not supported. '
-                    'Please set system to "windows" or "linux"'
-                )
-
-            figpath = eva_path + seperator +'plots' + seperator +\
-                rule.plot + '_' + rule.plotdomain + '_' + rule.ydata +\
-                '-'+ rule.xdata + seperator + f'N_{obj.N}'
-            
-            save_plot(fig=fig, name=rule.title, path=figpath)
-
-    def PlotSeperate(self, obj:FileData) -> plt.Figure:
-        '''
-        
+        Function to create and save plot with data from FileData objects in
+        PlotData object
         '''
         rule = self.rule
 
-        fig = plt.figure(figsize=(8, 6))            # create figure
-        ax = fig.add_subplot(1,1,1)                 # create subplot
-
-        # set title and axis labels
-        ax.set_title(rule.title)
-        ax.set_xlabel(rule.xlabel)
-        ax.set_ylabel(rule.ylabel)
-
-        # set plot cycle with aspects from PlotRule object
-        ax.set_prop_cycle(
-            color=rule.color,
-            linestyle=rule.ls,
-            lw=rule.lw,
-            marker=rule.marker,
-            ms=rule.ms
-        )
-
-        xdata = getattr(obj, rule.xdata)
-        ydata = [getattr(obj, r) for r in rule.ydata]
-        ydata = np.asarray(ydata)
-
-        # plot data as diagram or histogram
-        if rule.plot == 'diag':
-            ax.set_xlim(left=rule.xlim[0], right=rule.xlim[1])
-            ax.set_ylim(bottom=rule.ylim[0], top=rule.ylim[1])
-            if rule.plotdomain == 'Kratky':
-                # plot data in Kratky plot
-                ydata = ydata*xdata**2
-                ax.loglog(xdata, ydata.T, label=rule.label)
-            else:
-                # plot data in normal plot
-                ax.plot(xdata, ydata.T, label=rule.label)
-                ax.set_xscale(rule.xscale)
-                ax.set_yscale(rule.yscale)
-        elif rule.plot == 'hist':
-            # create bins and plot data in histogram
-            bins = np.linspace(
-                np.min(ydata), np.max(ydata), rule.binnum
-            )
-            ax.hist(
-                ydata.flatten(), bins=bins, density=True,
-                color=rule.color, label=rule.label
-            )
+        if system == 'windows':
+            seperator = '\\'            # define seperator for windows 
+                                        # operating system
+        elif system == 'linux':
+            seperator = '/'             # define seperator for linux
+                                        # operating system
         else:
             raise ValueError(
-                f'Plot type "{rule.plot}" not supported. '
-                'Please set plot to "diag" or "hist"'
-            )
-        return fig
+                f'Input "{system}" for system not supported. '
+                'Please set system to "windows" or "linux"'
+            )        
+        figpath = eva_path + seperator + 'plots' + seperator +\
+            rule.plot + '_' + rule.plotdomain + '_' + rule.ydata +\
+            '_vs_'+ rule.xdata + seperator + f'N_{rule.Nrule}'
+        print(f'Plot path: {figpath}')
 
-    def PlotAllInOne(self) -> plt.Figure:
-        '''
-        
-        '''
-        rule = self.rule
+        if rule.xdata == 'c1':
+            rule.xdata = 'PCspaceS[:,0]'
+        elif rule.xdata == 'c2':
+            rule.xdata = 'PCspaceS[:,1]'
+        elif rule.xdata == 'PC1':
+            rule.xdata = 'components_[0,:]'
+        elif rule.xdata == 'PC2':
+            rule.xdata = 'components_[1,:]'
 
-        fig = plt.figure(figsize=(8, 6))            # create figure
-        ax = fig.add_subplot(1,1,1)                 # create subplot
+        if rule.ydata == 'c1':
+            rule.ydata = 'PCspaceS[:,0]'
+        elif rule.ydata == 'c2':
+            rule.ydata = 'PCspaceS[:,1]'
+        elif rule.ydata == 'PC1':
+            rule.ydata = 'components_[0,:]'
+        elif rule.ydata == 'PC2':
+            rule.ydata = 'components_[1,:]'
+                
+        fig = plt.figure(figsize=rule.figsize)      # create figure
+        ax = fig.add_subplot(1, 1, 1)               # create subplot
 
         # set title and axis labels
         ax.set_title(rule.title)
@@ -473,47 +395,59 @@ class PlotData:
         ydata = []
 
         for i in getattr(rule, f'{rule.sortby}rule'):
-            xdata.append([
-                getattr(obj, rule.xdata) for obj in self.data
+            if len([
+                obj for obj in self.data
                 if getattr(obj, rule.sortby) == i
-            ])
-            ydata.append([
-                getattr(obj, rule.ydata) for obj in self.data
-                if getattr(obj, rule.sortby) == i
-            ])
+            ]) == 0:
+                continue
+            xdata.append(
+                np.stack([
+                    getattr(obj, rule.xdata) for obj in self.data
+                    if getattr(obj, rule.sortby) == i
+                ], axis=0)
+            )
 
-        xdata = np.asanyarray(xdata)
-        ydata = np.asanyarray(ydata)
-        
-        # plot data as diagram or histogram
-        if rule.plot == 'diag':
-            ax.set_xlim(left=rule.xlim[0], right=rule.xlim[1])
-            ax.set_ylim(bottom=rule.ylim[0], top=rule.ylim[1])
-            if rule.plotdomain == 'Kratky':
-                # plot data in Kratky plot
-                ydata = ydata*xdata**2
-                ax.loglog(xdata, ydata.T, label=rule.label)
+            ydata.append(
+                np.stack([
+                    getattr(obj, rule.ydata) for obj in self.data
+                    if getattr(obj, rule.sortby) == i
+                ], axis=0)
+            )
+
+        for i in range(len(xdata)):
+            # plot data as diagram or histogram
+            if rule.plot == 'diag':
+                ax.set_xlim(left=rule.xlim[0], right=rule.xlim[1])
+                ax.set_ylim(bottom=rule.ylim[0], top=rule.ylim[1])
+                if rule.plotdomain == 'Kratky':
+                    # plot data in Kratky plot
+                    ydata[i] = ydata[i]*xdata[i]**2
+                    ax.loglog(
+                        xdata[i], rule.scalfac*ydata[i].T, label=rule.label
+                    )
+                else:
+                    # plot data in normal plot
+                    ax.plot(
+                        xdata[i], rule.scalfac*ydata[i].T, label=rule.label
+                    )
+                    ax.set_xscale(rule.xscale)
+                    ax.set_yscale(rule.yscale)
+            elif rule.plot == 'hist':
+                # create bins and plot data in histogram
+                bins = np.linspace(
+                    np.min(ydata[i]), np.max(ydata[i]), rule.binnum
+                )
+                ax.hist(
+                    ydata[i].flatten(), bins=bins, density=True,
+                    color=rule.color, label=rule.label
+                )
             else:
-                # plot data in normal plot
-                ax.plot(xdata, ydata.T, label=rule.label)
-                ax.set_xscale(rule.xscale)
-                ax.set_yscale(rule.yscale)
-        elif rule.plot == 'hist':
-            # create bins and plot data in histogram
-            bins = np.linspace(
-                np.min(ydata), np.max(ydata), rule.binnum
-            )
-            ax.hist(
-                ydata.flatten(), bins=bins, density=True,
-                color=rule.color, label=rule.label
-            )
-        else:
-            raise ValueError(
-                f'Plot type "{rule.plot}" not supported. '
-                'Please set plot to "diag" or "hist"'
-            )
-            
-        return fig
+                raise ValueError(
+                    f'Plot type "{rule.plot}" not supported. '
+                    'Please set plot to "diag" or "hist"'
+                )
+        
+        save_plot(fig=fig, name=f'f_{rule.frule}', path=figpath)
 
         
 def filter_func(
@@ -563,7 +497,7 @@ def filter_func(
 
         # print and save results in seperate .txt file
         with open(eva_path + seperator + 'results.txt', 'a') as res_file:
-            res_file.write(f'chain length:              {DataObj.length}\n' +\
+            res_file.write(f'chain length:              {DataObj.N}\n' +\
                            f'Connector distance:        {DataObj.f}\n' +\
                             'empirical variance:         ' +\
                            f'{round(np.mean(DataObj.empvar),6)}\n' +\

@@ -1,1 +1,1 @@
-{"NComps": 2, "binnum": 30, "root_dir": ".", "search_crit": ".\\**\\*.hdf5", "filter_obj": "swell_sqiso_key", "eva_path": "..\\data_evaluation\\script_evaluation", "system": "windows"}
+{"NComps": 2, "binnum": 30, "root_dir": ".", "search_crit": ".\\**\\*.hdf5", "filter_obj": "swell_sqiso_key", "eva_path": "..\\data_evaluation\\script_evaluation", "fileformat": ".png", "system": "windows"}
