@@ -33,7 +33,7 @@ search_crit = root_dir + '\\**\\*.hdf5'.replace('\\\\', seperator)
 
 
 filter_obj = 'swell_sqiso_key'
-eva_path = root_dir + '.\\data_evaluation\\script_evaluation'.replace('\\\\', seperator)
+eva_path = root_dir + '\\data_evaluation\\script_evaluation'.replace('\\\\', seperator)
 
 
 config = {
@@ -49,7 +49,7 @@ config = {
 
 plotaspects = {
     'Nrule' : [40],
-    'frule' : [1/23],
+    'frule' : [1/2],
     'binnum' : 30,
     'title' : 'Plot title',
     'xlabel' : 'xlable',
@@ -65,7 +65,7 @@ plotaspects = {
     'ls' : ['-'],
     'color' : ['dodgerblue'],
     'marker' :['o'],
-    'ms' : [3.5],
+    'markersize' : [3.5],
     'plotdomain' : 'Kratky',
     'plot' : 'diag',
     'sortby' : 'N',
@@ -85,7 +85,7 @@ def FitGyraRad(x, a0, a1):
 import json
 
 with open(
-    '.\\data_evaluation\\Scripts\config.json'.replace('\\\\', seperator),
+    '.\\data_evaluation\\Scripts\\config.json'.replace('\\\\', seperator),
     'w') as configf:
     json.dump(config, configf)
 

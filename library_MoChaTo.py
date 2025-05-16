@@ -91,6 +91,10 @@ class FileData(PCA):
         self.fit(self.S)
         self.PCspaceS = self.transform(self.S)
         self.Per_Recon()
+        self.c1 = self.PCspaceS[:,0]
+        self.c2 = self.PCspaceS[:,1]
+        self.PC1 = self.components_[0,:]
+        self.PC2 = self.components_[1,:]
 
     @staticmethod
     def ExtractFileData(file:h5py.File, path:str, filter_obj:str, ncomps:int):
@@ -170,7 +174,8 @@ class FileData(PCA):
     
     def LLCalc(self) -> None:
         '''
-        Function to calculate loop length an mean loop length from crosslink matrix
+        Function to calculate loop length an mean loop length from crosslink
+        matrix
         '''
         ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
         ll = np.split(ll, indices_or_sections=ll.shape[0], axis=0)
@@ -355,24 +360,6 @@ class PlotData:
             rule.plot + '_' + rule.plotdomain + '_' + rule.ydata +\
             '_vs_'+ rule.xdata + seperator + f'N_{rule.Nrule}'
         print(f'Plot path: {figpath}')
-
-        if rule.xdata == 'c1':
-            rule.xdata = 'PCspaceS[:,0]'
-        elif rule.xdata == 'c2':
-            rule.xdata = 'PCspaceS[:,1]'
-        elif rule.xdata == 'PC1':
-            rule.xdata = 'components_[0,:]'
-        elif rule.xdata == 'PC2':
-            rule.xdata = 'components_[1,:]'
-
-        if rule.ydata == 'c1':
-            rule.ydata = 'PCspaceS[:,0]'
-        elif rule.ydata == 'c2':
-            rule.ydata = 'PCspaceS[:,1]'
-        elif rule.ydata == 'PC1':
-            rule.ydata = 'components_[0,:]'
-        elif rule.ydata == 'PC2':
-            rule.ydata = 'components_[1,:]'
                 
         fig = plt.figure(figsize=rule.figsize)      # create figure
         ax = fig.add_subplot(1, 1, 1)               # create subplot
@@ -381,15 +368,6 @@ class PlotData:
         ax.set_title(rule.title)
         ax.set_xlabel(rule.xlabel)
         ax.set_ylabel(rule.ylabel)
-
-        # set plot cycle with aspects from PlotRule object
-        ax.set_prop_cycle(
-            color=rule.color,
-            linestyle=rule.ls,
-            lw=rule.lw,
-            marker=rule.marker,
-            ms=rule.ms
-        )
 
         xdata = []
         ydata = []
@@ -414,7 +392,11 @@ class PlotData:
                 ], axis=0)
             )
 
+
         for i in range(len(xdata)):
+            if xdata[i].shape[0] != ydata[i].shape[0]:
+                ydata[i] = ydata[i].T
+            
             # plot data as diagram or histogram
             if rule.plot == 'diag':
                 ax.set_xlim(left=rule.xlim[0], right=rule.xlim[1])
@@ -423,12 +405,18 @@ class PlotData:
                     # plot data in Kratky plot
                     ydata[i] = ydata[i]*xdata[i]**2
                     ax.loglog(
-                        xdata[i], rule.scalfac*ydata[i].T, label=rule.label
+                        xdata[i], rule.scalfac*ydata[i], color=rule.color[i],
+                        linestyle=rule.ls[i], lw=rule.lw[i],
+                        marker=rule.marker[i], ms=rule.ms[i],
+                        label=rule.label[i]
                     )
                 else:
                     # plot data in normal plot
                     ax.plot(
-                        xdata[i], rule.scalfac*ydata[i].T, label=rule.label
+                        xdata[i], rule.scalfac*ydata[i], color=rule.color[i],
+                        linestyle=rule.ls[i], lw=rule.lw[i],
+                        marker=rule.marker[i], ms=rule.markersize[i],
+                        label=rule.label[i]
                     )
                     ax.set_xscale(rule.xscale)
                     ax.set_yscale(rule.yscale)
@@ -439,7 +427,7 @@ class PlotData:
                 )
                 ax.hist(
                     ydata[i].flatten(), bins=bins, density=True,
-                    color=rule.color, label=rule.label
+                    color=rule.color[i], label=rule.label
                 )
             else:
                 raise ValueError(
