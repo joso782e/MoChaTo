@@ -113,7 +113,6 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     
     plotaspects = {}
 
-    
     # Nrule:        -list of floats or 'all', obj.N matching rule are plotted
     # frule:        -list of floats or 'all', obj.f matching rule are plotted 
     # binnum:       -int setting number of bins 
@@ -144,10 +143,10 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     # sortby:       -option to sort data sets by N or f values
     # legend:       -wether to display legend or not
     # legend_loc:   -str disribing the legends location in the plot
-    # label:        -nested list with labels matching sorted data sets
+    # label:        -str for what to use in labeling data sets: either N or f
     
-    plotaspects['Nrule'] = [40]
-    plotaspects['frule'] = [1/2, 1/5, 1/7, 1/18]
+    plotaspects['Nrule'] = [40, 100, 200]
+    plotaspects['frule'] = [1/18]
     plotaspects['title'] = 'Radii of gyration vs. PC1'
     plotaspects['xlabel'] = r'$c_1$'
     plotaspects['ylabel'] = r'$R_g$'
@@ -158,17 +157,16 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['xscale'] = 'linear'
     plotaspects['yscale'] = 'linear'
     plotaspects['scalfac'] = 1.0
-    plotaspects['ls'] = ['None' for i in plotaspects['frule']]
-    plotaspects['lw'] = [1.0 for i in plotaspects['frule']]
-    plotaspects['marker'] = ['o' for i in plotaspects['frule']]
-    plotaspects['ms'] = [3.0 for i in plotaspects['frule']]
-    plotaspects['color'] = ['dodgerblue', 'orangered', 'limegreen', 'magenta']
+    plotaspects['ls'] = ['None' for i in plotaspects['Nrule']]
+    plotaspects['lw'] = [1.0 for i in plotaspects['Nrule']]
+    plotaspects['marker'] = ['o' for i in plotaspects['Nrule']]
+    plotaspects['ms'] = [3.0 for i in plotaspects['Nrule']]
+    plotaspects['color'] = ['dodgerblue', 'limegreen', 'orangered']
     plotaspects['plotdomain'] = 'PCspace'
+    plotaspects['sortby'] = 'N'
     plotaspects['legend'] = True
-    plotaspects['legend_loc'] = 'upper right'
-    plotaspects['label'] = [
-        [r'$f=$'+f'{round(f,2)}' for f in plotaspects['frule']]
-    ]
+    plotaspects['legend_loc'] = 'upper left'
+    plotaspects['label'] = 'N'
 
     gyraplot = lib.PlotData(plotaspects, DataObjs)
     gyraplot.CreatePlot()

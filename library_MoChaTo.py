@@ -86,7 +86,7 @@ class FileData(PCA):
         self.S = S
         self.clmat = np.asanyarray(clmat, dtype=np.int_)
         self.mS = np.mean(S, axis=0)
-        self.empvar = np.var(S, axis=0)/self.mS**2
+        self.empvar = np.sqrt(np.mean((S - self.mS)**2/self.mS**2, axis=0))
         self.LLCalc()
         self.fit(self.S)
         self.PCspaceS = self.transform(self.S)
@@ -155,22 +155,21 @@ class FileData(PCA):
         # calculate difference between original and reconstructed data
         diff = self.S - reconS
 
-        # calculate relative mean reonstruction error
-        mre = np.sqrt(np.mean((diff)**2))/np.mean(self.mS)
-        # variance of error
-        mrevar = np.mean((diff/np.mean(self.mS) - mre)**2)
-
         # calculate relative reconstruction error in q-space
-        re = np.sqrt(np.mean((diff)**2, axis=0))/self.mS
+        re = np.sqrt(np.mean((diff/self.S)**2, axis=0))
         # variance of error
-        revar = np.mean((diff/self.mS - re)**2, axis=0)
+        revar = np.sqrt(np.mean((diff/self.S-re)**2, axis=0))
 
-        setattr(self, 'reconS', reconS)     # set reconstructed data
-        setattr(self, 'mre', mre)           # set relative mean error
-        setattr(self, 're', re)             # set relative reconstruction error
-        setattr(self, 'mrevar', mrevar)     # set variance of relative mean
-                                            # error
-        setattr(self, 'revar', revar)       # set variance of relative error
+        # calculate relative mean reonstruction error
+        mre = np.mean(re)
+        # variance of error
+        mrevar = np.mean(revar)
+
+        self.reconS = reconS        # set reconstructed data
+        self.re = re                # set relative reconstruction error
+        self.mre = mre              # set relative mean reconstruction error
+        self.revar = revar          # set variance of relative error
+        self.mrevar = mrevar        # set variance of relative mean error
     
     def LLCalc(self) -> None:
         '''
@@ -179,8 +178,12 @@ class FileData(PCA):
         '''
         ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
         ll = np.split(ll, indices_or_sections=ll.shape[0], axis=0)
+
+        # set loop length
         self.ll = [l[np.nonzero(l)] for l in ll]
+        # set mean loop length
         self.mll = ([np.mean(l) if len(l) > 0 else 0 for l in self.ll])
+        # set number of loops
         self.nl = [len(l) for l in self.ll]
     
     def PerfFit(self, FitFunc, xdata, ydata, fitname) -> None:
@@ -397,6 +400,7 @@ class PlotData:
 
         xdata = []
         ydata = []
+        labels = []
 
         for i in getattr(rule, f'{rule.sortby}rule'):
             if len([
@@ -416,6 +420,10 @@ class PlotData:
                     if getattr(obj, rule.sortby) == i
                 ], axis=0)
             )
+            labels.append([
+                f'${rule.label}={round(getattr(obj, rule.label),2)}$'
+                for obj in self.data if getattr(obj, rule.sortby) == i
+            ])
 
         ax.set_prop_cycle(
             color=rule.color,
@@ -470,13 +478,13 @@ class PlotData:
                         xdata[i], rule.scalfac*ydata[i], color=rule.color[i],
                         linestyle=rule.ls[i], lw=rule.lw[i],
                         marker=rule.marker[i], ms=rule.ms[i],
-                        label=rule.label[i]
+                        label=labels[i]
                     )
                 else:
                     # plot data in normal plot
                     ax.plot(
                         xdata[i], rule.scalfac*ydata[i],
-                        label=rule.label[i]
+                        label=labels[i]
                     )
                     ax.set_xscale(rule.xscale)
                     ax.set_yscale(rule.yscale)
@@ -488,7 +496,7 @@ class PlotData:
                 )
                 ax.hist(
                     ydata[i].flatten(), bins=bins, density=True,
-                    color=rule.color[i], label=rule.label
+                    color=rule.color[i], label=labels
                 )
                 # display mean value and calculate optimal position for text
                 # and line
@@ -620,319 +628,3 @@ def save_plot(
     fig.savefig(path + seperator + name + fileformat)
     plt.pause(0.1)                                  # pause for 0.1 seconds
     plt.close()                                     # close figure
-
-
-def plot_princ_comps(DataObj:FileData, eva_path:str=config['eva_path'],\
-                     system:str=config['system']) -> None:
-    '''
-    Function to make script more clear. It contains all lines regarding
-    the plot of the principle components.
-    '''
-    # calculate mean of coordinates in principal component space
-    rms_c1 = np.sqrt(np.mean(DataObj.PCspaceS[:,0]**2))
-    rms_c2 = np.sqrt(np.mean(DataObj.PCspaceS[:,1]**2))
-
-    # important parameters for plotting principle components in q-space
-    qmin = 1e-2
-
-    
-    # plot principle components in q-space
-    fig = plt.figure(figsize=(8, 6))            # create figure
-    ax = fig.add_subplot(1, 1, 1)               # add subplot
-
-    ax.set_title(r'Scaled principle components in $q$-space')
-    ax.set_xlabel(r'$q$ / [Å$^{-1}$]')	
-    ax.set_ylabel(r'$S_1(q)q^2$')
-
-    ax.loglog(DataObj.q, rms_c1*DataObj.components_[0,:]*DataObj.q**2, lw=1.0,\
-            color='aqua', label='Component 1')
-    ax.loglog(DataObj.q, rms_c2*DataObj.components_[1,:]*DataObj.q**2, lw=1.0,\
-            color='springgreen', label='Component 2')
-    
-    ax.legend(loc='upper right')
-    ax.set_xlim(left=qmin)                  # set x-axis limits
-
-
-    if system == 'windows':
-        seperator = '\\'                    # define seperator for windows 
-                                            # operating system
-    elif system == 'linux':
-        seperator = '/'                     # define seperator for linux
-                                            # operating system
-
-    # define path to safe plot
-    path = eva_path + seperator +'plots' + seperator + 'PC_in_qspace'\
-           + seperator + f'N_{DataObj.length}'
-
-    # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path)
-
-
-def plot_data_PCspace(DataObj:FileData, eva_path:str=config['eva_path'],\
-                     system:str=config['system']) -> None:
-    '''
-    Function to make script more clear. It contains all lines regarding
-    the plot of the form factor in PC-space.
-    '''
-    # important parameters for plotting form factor in PC-space
-    c1min = 1.05*np.min(DataObj.PCspaceS[:,0])\
-            - 0.05*np.max(DataObj.PCspaceS[:,0])
-    c1max = 1.05*np.max(DataObj.PCspaceS[:,0])\
-            - 0.05*np.min(DataObj.PCspaceS[:,0])
-    c2min = 1.05*np.min(DataObj.PCspaceS[:,1])\
-            - 0.05*np.max(DataObj.PCspaceS[:,1])
-    c2max = 1.05*np.max(DataObj.PCspaceS[:,1])\
-            - 0.05*np.min(DataObj.PCspaceS[:,1])
-    
-    color = DataObj.mll/np.max(DataObj.mll)         # color for scatter plot
-
-    # plot form factor in PC-space
-    fig = plt.figure(figsize=(8, 6))                # create figure
-    ax = fig.add_subplot(1, 1, 1)                   # add subplot
-    ax.axis([c1min, c1max, c2min, c2max])           # set axis limits
-
-    ax.set_title(r'Form factor in PC-space')
-    ax.set_xlabel(r'Principle omponent 1')
-    ax.set_ylabel(r'Principle component 2')
-
-    scatter = ax.scatter(DataObj.PCspaceS[:,0], DataObj.PCspaceS[:,1], s=0.5,\
-                         c=color, cmap='RdBu')
-    
-    axcb = fig.colorbar(scatter, ax=ax)
-    axcb.set_label('mean loop length')
-    
-    if system == 'windows':
-        seperator = '\\'                    # define seperator for windows 
-                                            # operating system
-    elif system == 'linux':
-        seperator = '/'                     # define seperator for linux
-                                            # operating system
-
-    # define path to safe plot
-    path = eva_path + seperator +'plots' + seperator + 'transform_in_PCspace'\
-            + seperator + f'N_{DataObj.length}'
-
-    # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path)
-
-
-def plot_data_qspace(DataObj:FileData, eva_path:str=config['eva_path'],\
-                     system:str=config['system']) -> None:
-    '''
-    Function to make script more clear. It contains all lines regarding
-    the plot of the example curves in q-space.
-    '''
-    # important parameters for plotting example curves and mean curve in
-    # q-space
-    qmin = 1e-2
-    Smin = 1e-4
-    
-    # plot example curves and mean curve in q-space
-    fig = plt.figure(figsize=(8, 6))            # create figure
-    ax = fig.add_subplot(1, 1, 1)               # add subplot
-
-    ax.set_title('Experimental, reconstructed and mean form factor in'\
-                 + r' $q$-space')
-    ax.set_xlabel(r'$q$ / [Å$^{-1}$]')
-    ax.set_ylabel(r'$S(q)q^2$')
-
-    ax.plot(DataObj.q, DataObj.S[50,:]*DataObj.q**2, lw=1.0,\
-            color='dodgerblue', label='example curve 1')
-    ax.plot(DataObj.q, DataObj.S[350,:]*DataObj.q**2, lw=1.0,\
-            color='lightskyblue', label='example curve 2')
-    ax.plot(DataObj.q, DataObj.reconS[50,:]*DataObj.q**2, lw=1.0,\
-            ls='--', color='dodgerblue',\
-            label='reconstructed example curve 1')
-    ax.plot(DataObj.q, DataObj.reconS[350,:]*DataObj.q**2, lw=1.0,\
-            ls='--', color='lightskyblue',\
-            label='reconstructed example curve 2')
-    ax.plot(DataObj.q, DataObj.mS*DataObj.q**2, lw=1.0, color='black',\
-            label='mean curve with empirical variance')
-    
-    ax.legend(loc='lower right')            # set legend position
-    ax.set_yscale('log')                    # set y-axis to log scale
-    ax.set_xscale('log')                    # set x-axis to log scale
-    ax.set_xlim(left=qmin)                  # set x-axis limits
-    ax.set_ylim(bottom=Smin)                # set y-axis limits
-
-
-    if system == 'windows':
-        seperator = '\\'                    # define seperator for windows 
-                                            # operating system
-    elif system == 'linux':
-        seperator = '/'                     # define seperator for linux
-                                            # operating system
-
-    # define path to safe plot
-    path = eva_path + seperator +'plots' + seperator\
-           + 'example_in_qspace' + seperator + f'N_{DataObj.length}'
-
-    # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path)
-
-
-def plot_recon_error(DataObj:FileData, eva_path:str=config['eva_path'],\
-                     system:str=config['system']) -> None:
-    '''
-    Function to make script more clear. It contains all lines regarding
-    the plot of the reconstruction error, mean curves and example curves in
-    q-space.
-    '''
-    # important parameters for plotting reconstruction error in q-space
-    qmin = 1e-2
-
-    # plot reconstruction error in q-space
-    fig = plt.figure(figsize=(8, 6))            # create figure
-    ax = fig.add_subplot(1, 1, 1)               # add subplot
-
-    ax.set_title(r'Relative reconstruction error in $q$-space')
-    ax.set_xlabel(r'$q$ / [Å$^{-1}$]')
-    ax.set_ylabel(r'$e_S$')
-    
-    ax.plot(DataObj.q, DataObj.re*DataObj.q**2,  lw=1.0, color='tomato',\
-            label=r'$e_S(q)$')
-    ax.plot(DataObj.q, np.sqrt(DataObj.empvar)*DataObj.q**2, lw=1.0,\
-            color='dodgerblue', label=r'$\sigma_{emp}$')
-    ax.plot(DataObj.q, np.sqrt(DataObj.revar)*DataObj.q**2, lw=1.0, ls='--',\
-            color='tomato', label=r'$\sigma_{e_S}$')
-    
-    ax.legend(loc='upper right')            # set legend position
-    
-    ax.set_yscale('log')                     # set y-axis to log scale
-    ax.set_xscale('log')                     # set x-axis to log scale
-    ax.set_xlim(left=qmin)                   # set x-axis limits
-    
-    if system == 'windows':
-        seperator = '\\'                    # define seperator for windows 
-                                            # operating system
-    elif system == 'linux':
-        seperator = '/'                     # define seperator for linux
-                                            # operating system
-
-    # define path to safe plot
-    path = eva_path + seperator +'plots' + seperator\
-           + 'eS_in_qspace' + seperator + f'N_{DataObj.length}'
-
-    # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path)
-
-
-def plot_ll_hist(DataObj:FileData, binnum:int=config['binnum'],\
-                   eva_path:str=config['eva_path'],\
-                   system:str=config['system']) -> None:
-    '''
-    Function to make script more clear. It contains all lines regarding
-    the plot of the loop length histogram. The bins are normalized as
-    such, that the area under the histogramm integrates to 1. For further
-    information please refere to the documentation of plt.hist().
-    '''
-    # important parameters for plotting loop length histogram
-    bins = np.linspace(np.min(DataObj.ll), np.max(DataObj.ll), binnum)
-    llflat = DataObj.ll.flatten()
-
-    # plot loop length histogram
-    fig = plt.figure(figsize=(8, 6))            # create figure
-    ax = fig.add_subplot(1, 1, 1)               # add subplot
-
-    ax.set_title(r'Histogram of loop lengths')
-    ax.set_xlabel(r'monomers per loop')
-    ax.set_ylabel(r'relative frequency')
-
-    ax.hist(llflat, bins=bins, density=True, color='dodgerblue')
-
-    if system == 'windows':
-        seperator = '\\'                    # define seperator for windows 
-                                            # operating system
-    elif system == 'linux':
-        seperator = '/'                     # define seperator for linux
-                                            # operating system
-
-    # define path to safe plot
-    path = eva_path + seperator +'plots' + seperator\
-           + 'll_hist' + seperator + f'N_{DataObj.length}'
-
-    # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path)
-
-
-def plot_mll_hist(DataObj:FileData, binnum:int=config['binnum'],\
-                   eva_path:str=config['eva_path'],\
-                   system:str=config['system']) -> None:
-    '''
-    Function to make script more clear. It contains all lines regarding
-    the plot of the mean loop length histogram. The bins are normalized as
-    such, that the area under the histogramm integrates to 1. For further
-    information please refere to the documentation of plt.hist().
-    '''
-    # important parameters for plotting loop length histogram
-    bins = np.linspace(np.min(DataObj.mll), np.max(DataObj.mll), binnum)
-
-    # plot loop length histogram
-    fig = plt.figure(figsize=(8, 6))            # create figure
-    ax = fig.add_subplot(1, 1, 1)               # add subplot
-
-    ax.set_title(r'Histogram of mean loop lengths')
-    ax.set_xlabel(r'mean number of monomers per loop')
-    ax.set_ylabel(r'relative frequency')
-
-    ax.hist(DataObj.mll, bins=bins, density=False, color='dodgerblue')
-
-    if system == 'windows':
-        seperator = '\\'                    # define seperator for windows 
-                                            # operating system
-    elif system == 'linux':
-        seperator = '/'                     # define seperator for linux
-                                            # operating system
-
-    # define path to safe plot
-    path = eva_path + seperator +'plots' + seperator\
-           + 'mll_hist' + seperator + f'N_{DataObj.length}'
-
-    # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path)
-
-
-def plot_mll_vs_ci(DataObj:FileData, i:int, eva_path:str=config['eva_path'],\
-                    system:str=config['system']) -> None:
-    '''
-    Function to make script more clear. It contains all lines regarding the
-    plot of the mean loop length depending on the coordinate in the "i"-th
-    principle component.
-    '''
-    # important parameters for plotting mean loop length depending on
-    # the coordinates in the "i"-th principle component
-    cimin = 1.05*np.min(DataObj.PCspaceS[:,i-1])\
-           - 0.05*np.max(DataObj.PCspaceS[:,i-1])
-    cimax = 1.05*np.max(DataObj.PCspaceS[:,i-1])\
-           - 0.05*np.min(DataObj.PCspaceS[:,i-1])
-    mllmin = 1.05*np.min(DataObj.mll)\
-             - 0.05*np.max(DataObj.mll)
-    mllmax = 1.05*np.max(DataObj.mll)\
-             - 0.05*np.min(DataObj.mll)
-    
-    # plot mll vs ci
-    fig = plt.figure(figsize=(8, 6))            # create figure
-    ax = fig.add_subplot(1, 1, 1)               # add subplot
-    ax.axis([cimin, cimax, mllmin, mllmax])     # set axis limits
-
-    ax.set_title(r'Mean loop length depending on' + f' $c_{i}$ in PC-space')
-    ax.set_xlabel(fr'$c_{i}$')
-    ax.set_ylabel(r'mean number of monomers per loop')
-
-    ax.plot(DataObj.PCspaceS[:,i-1], DataObj.mll, ls='None', marker='o',\
-            ms=3.5, mfc='dodgerblue', mec='dodgerblue')
-
-
-    if system == 'windows':
-        seperator = '\\'                    # define seperator for windows 
-                                            # operating system
-    elif system == 'linux':
-        seperator = '/'                     # define seperator for linux
-                                            # operating system
-
-    # define path to safe plot
-    path = eva_path + seperator +'plots' + seperator\
-           + f'mll_vs_c{i}' + seperator + f'N_{DataObj.length}'
-
-    # save and close figure
-    save_plot(fig=fig, name=DataObj.condi, path=path)
