@@ -168,7 +168,6 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['legend_loc'] = 'upper right'
     plotaspects['label'] = [r'$f=$'+f'{round(f,2)}'
                             for f in plotaspects['frule']]
-    print(plotaspects['label'])
 
     gyraplot = lib.PlotData(plotaspects, DataObjs)
     gyraplot.CreatePlot()
