@@ -180,7 +180,8 @@ class FileData(PCA):
         ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
         ll = np.split(ll, indices_or_sections=ll.shape[0], axis=0)
         self.ll = [l[np.nonzero(l)] for l in ll]
-        self.mll = np.array([np.mean(l) for l in self.ll])
+        self.mll = ([np.mean(l) if len(l) > 0 else 0 for l in self.ll])
+        self.nl = [len(l) for l in self.ll]
     
     def PerfFit(self, FitFunc, xdata, ydata, fitname) -> None:
         '''
@@ -209,6 +210,33 @@ class FileData(PCA):
                     f.append(fit[j])
 
                     setattr(self, f'{fitname}{j}', f)
+
+
+class Cycler:
+    '''
+    Class to create a cycler
+    '''
+
+    def __init__(self, iterable):
+        self.count = 0
+        self.iterable = iterable
+    
+    def Cycle(self):
+        '''
+        Function to cycle through iterable
+        '''
+        if self.count >= len(self.iterable):
+            self.count = 0
+        item = self.iterable[self.count]
+        self.count += 1
+        return item
+    
+    def FullCycle(self):
+        '''
+        Function to perform full cycle through iterable
+        '''
+        for i in range(len(self.iterable)):
+            yield self.Cycle()
 
 
 class PlotRule:
@@ -359,7 +387,6 @@ class PlotData:
         figpath = eva_path + seperator + 'plots' + seperator +\
             rule.plot + '_' + rule.plotdomain + '_' + rule.ydata +\
             '_vs_'+ rule.xdata + seperator + f'N_{rule.Nrule}'
-        print(f'Plot path: {figpath}')
                 
         fig = plt.figure(figsize=rule.figsize)      # create figure
         ax = fig.add_subplot(1, 1, 1)               # create subplot
@@ -368,6 +395,7 @@ class PlotData:
         ax.set_title(rule.title)
         ax.set_xlabel(rule.xlabel)
         ax.set_ylabel(rule.ylabel)
+        ax.grid(axis='both', ls='--', lw=0.5, color='grey')
 
         xdata = []
         ydata = []
@@ -384,7 +412,6 @@ class PlotData:
                     if getattr(obj, rule.sortby) == i
                 ], axis=0)
             )
-
             ydata.append(
                 np.stack([
                     getattr(obj, rule.ydata) for obj in self.data
@@ -394,8 +421,19 @@ class PlotData:
 
 
         for i in range(len(xdata)):
+            # asume more data points then samples
+            if xdata[i].shape[0] < xdata[i].shape[1]:
+                xdata[i] = xdata[i].T
+            # check if one axis lenght of ydata[i] matches length of axis 0 in
+            # xdata[i], if not raise ValueError
             if xdata[i].shape[0] != ydata[i].shape[0]:
                 ydata[i] = ydata[i].T
+                if xdata[i].shape[0] != ydata[i].shape[0]:
+                    raise ValueError(
+                        f'Data set {i+1} can not be plotted against each '
+                        f'other because their shapes {xdata[i].shape} and '
+                        f'{ydata[i].shape} can not be broadcast together.'
+                    )
             
             # plot data as diagram or histogram
             if rule.plot == 'diag':
@@ -412,6 +450,8 @@ class PlotData:
                     )
                 else:
                     # plot data in normal plot
+                    print(f'{xdata[i].shape}')
+                    print(f'{ydata[i].shape}')
                     ax.plot(
                         xdata[i], rule.scalfac*ydata[i], color=rule.color[i],
                         linestyle=rule.ls[i], lw=rule.lw[i],
@@ -429,11 +469,27 @@ class PlotData:
                     ydata[i].flatten(), bins=bins, density=True,
                     color=rule.color[i], label=rule.label
                 )
+                # display mean value and calculate optimal position for text
+                # and line
+                hax = ax.get_ylim()[1] - ax.get_ylim()[0]
+                ymin = -ax.get_ylim()[0]/hax
+                ymax = ax.get_ylim()[1]/hax
+                ax.axvline(
+                    np.mean([ydata[i]]), ymin, ymax, 
+                )
+                ax.text(np.mean(
+                    ydata[i]), ymax*hax,
+                    f'mean value:\n{round(np.mean(ydata[i]),4)}',
+                    horizontalalignment='center',
+                    verticalalignment='bottom'
+                )
             else:
                 raise ValueError(
                     f'Plot type "{rule.plot}" not supported. '
                     'Please set plot to "diag" or "hist"'
                 )
+        if rule.legend:
+            ax.legend(loc=rule.legend_loc)
         
         save_plot(fig=fig, name=f'f_{rule.frule}', path=figpath)
 
