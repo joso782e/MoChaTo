@@ -7,4 +7,4 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
-print(sys.maxsize > 2**32)
+print(type(None))

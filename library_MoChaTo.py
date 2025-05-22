@@ -419,6 +419,13 @@ class PlotData:
                 ], axis=0)
             )
 
+        ax.set_prop_cycle(
+            color=rule.color,
+            ls=rule.ls,
+            lw=rule.lw,
+            marker=rule.marker,
+            ms=rule.ms,
+        )
 
         for i in range(len(xdata)):
             # asume more data points then samples
@@ -435,10 +442,29 @@ class PlotData:
                         f'{ydata[i].shape} can not be broadcast together.'
                     )
             
+            
+            
             # plot data as diagram or histogram
             if rule.plot == 'diag':
-                ax.set_xlim(left=rule.xlim[0], right=rule.xlim[1])
-                ax.set_ylim(bottom=rule.ylim[0], top=rule.ylim[1])
+                # dicide wether to turn auto scale on or not
+                xup = rule.xlim[0]
+                xlow = rule.xlim[1]
+                yup = rule.ylim[0]
+                ylow = rule.ylim[1]
+                if xup and xlow and (type(xup), type(xlow)) != (float, float):
+                    xauto = False
+                else:
+                    xauto = True
+                
+                if yup and ylow and (type(yup), type(ylow)) != (float, float):
+                    yauto = False
+                else:
+                    yauto = True
+
+                # set axis view limits
+                ax.set_xlim(left=xlow, right=xup, auto=xauto)
+                ax.set_ylim(bottom=ylow, top=yup, auto=yauto)
+
                 if rule.plotdomain == 'Kratky':
                     # plot data in Kratky plot
                     ydata[i] = ydata[i]*xdata[i]**2
@@ -450,16 +476,13 @@ class PlotData:
                     )
                 else:
                     # plot data in normal plot
-                    print(f'{xdata[i].shape}')
-                    print(f'{ydata[i].shape}')
                     ax.plot(
-                        xdata[i], rule.scalfac*ydata[i], color=rule.color[i],
-                        linestyle=rule.ls[i], lw=rule.lw[i],
-                        marker=rule.marker[i], ms=rule.markersize[i],
+                        xdata[i], rule.scalfac*ydata[i],
                         label=rule.label[i]
                     )
                     ax.set_xscale(rule.xscale)
                     ax.set_yscale(rule.yscale)
+
             elif rule.plot == 'hist':
                 # create bins and plot data in histogram
                 bins = np.linspace(
@@ -488,10 +511,13 @@ class PlotData:
                     f'Plot type "{rule.plot}" not supported. '
                     'Please set plot to "diag" or "hist"'
                 )
+            
         if rule.legend:
             ax.legend(loc=rule.legend_loc)
         
-        save_plot(fig=fig, name=f'f_{rule.frule}', path=figpath)
+        save_plot(
+            fig=fig, name=f'f_{[round(f,2) for f in rule.frule]}', path=figpath
+        )
 
         
 def filter_func(

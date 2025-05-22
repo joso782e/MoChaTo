@@ -33,7 +33,8 @@ search_crit = root_dir + '\\**\\*.hdf5'.replace('\\\\', seperator)
 
 
 filter_obj = 'swell_sqiso_key'
-eva_path = root_dir + '\\data_evaluation\\script_evaluation'.replace('\\\\', seperator)
+eva_path = root_dir +\
+    '\\data_evaluation\\script_evaluation'.replace('\\\\', seperator)
 
 
 config = {
@@ -47,33 +48,6 @@ config = {
     'system' : system,
 }
 
-plotaspects = {
-    'Nrule' : [40],
-    'frule' : [1/2],
-    'binnum' : 30,
-    'title' : 'Plot title',
-    'xlabel' : 'xlable',
-    'ylabel' : 'ylable',
-    'xdata' : 'q',
-    'ydata' : 'S',
-    'xlim' : [1e-2, None],
-    'ylim' : [1e-4, None],
-    'xscale' : 'linear',
-    'yscale' : 'linear',
-    'scalfac' : 1.0,
-    'lw' : [1.0],
-    'ls' : ['-'],
-    'color' : ['dodgerblue'],
-    'marker' :['o'],
-    'markersize' : [3.5],
-    'plotdomain' : 'Kratky',
-    'plot' : 'diag',
-    'sortby' : 'N',
-    'legend' : True,
-    'legend_loc' : 'upper right',
-    'label' : 'legend label'
-}
-
 
 def FitGyraRad(x, a0, a1):
     '''
@@ -83,7 +57,6 @@ def FitGyraRad(x, a0, a1):
 
 
 import json
-
 with open(
     '.\\data_evaluation\\Scripts\\config.json'.replace('\\\\', seperator),
     'w') as configf:
@@ -136,7 +109,45 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     for obj in DataObjs:
         # perform fit for radii of gyration
         obj.PerfFit(FitGyraRad, 'q', 'S', 'Rg')
+
     
+    plotaspects = {}
+
+    
+    # Nrule:        -list of floats, data matching obj.N are plotted
+    # frule:        -list of floats, data matching obj.f are plotted 
+    # binnum:       -int setting number of bins 
+    # title:        -str setting plot title
+    # xlabel:       -str setting x-axis label
+    # ylabel:       -str setting y-axis label
+    # xdata:        -str referencing an obj attribute for use as xdata
+    # ydata:        -str referencing an obj attribute for use as ydata
+    # xlim:         -list or tuple setting x-axis view limits;
+    #                e.g. [1e-2, None]
+    # ylim:         -list or tuple setting x-axis view limits,
+    #                e.g. [1e-4, None]
+    # xscale:       -str setting scaling of x-axis
+    # yscale:       -str setting scaling of y-axis
+    # scalfac:      -list or array scaling y data
+    # ls:           -list of str setting linestyles;
+    #                length must match with lw, color, marker and ms
+    # lw:           -list of floats setting linewidths;
+    #                length must match with ls, color, marker and ms
+    # marker:       -list of str setting marker types;
+    #                length must match with ls, lw, color and ms
+    # ms:           -list of floats setting marker sizes;
+    #                length must match with ls, lw, color and marker
+    # color:        -list of colors;
+    #                length must match with ls, lw, marker and ms
+    # plotdomain:   -decide how to plot data as graph; only Kratky implemented
+    # plot:         -decide wether to plot as graph/scatter or as histogram
+    # sortby:       -option to sort data sets by N or f values
+    # legend:       -wether to display legend or not
+    # legend_loc:   -str disribing the legends location in the plot
+    # label:        -list or nested list with labels matching sorted data sets
+    
+    plotaspects['Nrule'] = [40]
+    plotaspects['frule'] = [1/2, 1/5, 1/9, 1/18]
     plotaspects['title'] = 'Radii of gyration vs. PC1'
     plotaspects['xlabel'] = r'$c_1$'
     plotaspects['ylabel'] = r'$R_g$'
@@ -144,9 +155,20 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['ydata'] = 'Rg1'
     plotaspects['xlim'] = [None, None]
     plotaspects['ylim'] = [None, None]
-    plotaspects['ls'] = ['None']
+    plotaspects['xscale'] = 'linear'
+    plotaspects['yscale'] = 'linear'
+    plotaspects['scalfac'] = 1.0
+    plotaspects['ls'] = ['None' for i in plotaspects['frule']]
+    plotaspects['lw'] = [1.0 for i in plotaspects['frule']]
+    plotaspects['marker'] = ['o' for i in plotaspects['frule']]
+    plotaspects['ms'] = [3.0 for i in plotaspects['frule']]
+    plotaspects['color'] = ['dodgerblue', 'orangered', 'limegreen', 'magenta']
     plotaspects['plotdomain'] = 'PCspace'
-    plotaspects['legend'] = False
+    plotaspects['legend'] = True
+    plotaspects['legend_loc'] = 'upper right'
+    plotaspects['label'] = [r'$f=$'+f'{round(f),2}'
+                            for f in plotaspects['frule']]
+    print(plotaspects['label'])
 
     gyraplot = lib.PlotData(plotaspects, DataObjs)
     gyraplot.CreatePlot()
