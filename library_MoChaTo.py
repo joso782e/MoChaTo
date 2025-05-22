@@ -288,52 +288,50 @@ class PlotData:
     ):
         self.rule = PlotRule(plotaspects=plotaspects)
 
-        if not (
-            (self.rule.Nrule in [obj.N for obj in dataobjs]) or
-            (self.rule.Nrule != 'all')
-            ):
+        if (
+            not set(self.rule.Nrule).issubset([obj.N for obj in dataobjs]) or
+            self.rule.Nrule == 'all'
+        ):
             raise ValueError(
-                f'Rule "N = {self.rule.Nrule}" not in data objects. '
+                f'Rule "N = {self.rule.Nrule}" not subset of all N values. '
                  'Please set Nrule to one or a list of the following values:'
                 f'\n{np.unique([obj.N for obj in dataobjs])}'
                  '\nor to "all"'
             )
         
-        if not (
-            (self.rule.frule in [obj.f for obj in dataobjs]) or
-            (self.rule.frule != 'all')
+        if (
+            not set(self.rule.frule).issubset([obj.f for obj in dataobjs]) or
+            self.rule.frule == 'all'
         ):
             raise ValueError(
-                f'Rule "f = {self.rule.frule}" not in data objects. '
-                 'Please set frule to one or a list of one over the following '
-                 'values:'
-                f'\n{np.unique([int(1/obj.f) for obj in dataobjs])}'
+                f'Rule "f = {[f'1/{int(1/f)}' for f in self.rule.frule]}" not '
+                'subset of all f values. Please set frule to one or a list of '
+                'one of the following float values:'
+                f'\n{np.unique([f'1/{int(1/obj.f)}' for obj in dataobjs])}'
                  '\nor to "all"'
             )
         
         if not (
-            self.rule.xdata in dir(dataobjs[0]) or
-            self.rule.xdata in ['c1', 'c2', 'PC1', 'PC2']
-            ):
+            self.rule.xdata in dir(dataobjs[0])
+        ):
             raise AttributeError(
                 f'Rule "xdata = {self.rule.xdata}" not as attribute in '
                  'FileData objects. Please set xdata to one of the following '
                  'values:'
                 f'\n{dir(dataobjs[0])}'
-                '\n,to "c1"/"c2" for coordinate 1/2 in PC-space '
+                '\n, specificly to "c1"/"c2" for coordinate 1/2 in PC-space '
                 'or to "PC1"/"PC2" for principal component 1/2'
             )
         
         if not (
-            self.rule.ydata in dir(dataobjs[0]) or
-            self.rule.ydata in ['c1', 'c2', 'PC1', 'PC2']
-            ):
+            self.rule.ydata in dir(dataobjs[0])
+        ):
             raise AttributeError(
                 f'Rule "ydata = {self.rule.ydata}" not as attribute in '
                  'FileData objects. Please set ydata to one of the following '
                  'values:'
                 f'\n{dir(dataobjs[0])}'
-                '\n, to "c1"/"c2" for coordinate 1/2 in PC-space '
+                '\n, specificly to "c1"/"c2" for coordinate 1/2 in PC-space '
                 'or to "PC1"/"PC2" for principal component 1/2'
             )
         

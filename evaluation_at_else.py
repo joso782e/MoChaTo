@@ -114,8 +114,8 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects = {}
 
     
-    # Nrule:        -list of floats, data matching obj.N are plotted
-    # frule:        -list of floats, data matching obj.f are plotted 
+    # Nrule:        -list of floats or 'all', obj.N matching rule are plotted
+    # frule:        -list of floats or 'all', obj.f matching rule are plotted 
     # binnum:       -int setting number of bins 
     # title:        -str setting plot title
     # xlabel:       -str setting x-axis label
@@ -144,10 +144,10 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     # sortby:       -option to sort data sets by N or f values
     # legend:       -wether to display legend or not
     # legend_loc:   -str disribing the legends location in the plot
-    # label:        -list or nested list with labels matching sorted data sets
+    # label:        -nested list with labels matching sorted data sets
     
     plotaspects['Nrule'] = [40]
-    plotaspects['frule'] = [1/2, 1/5, 1/9, 1/18]
+    plotaspects['frule'] = [1/2, 1/5, 1/7, 1/18]
     plotaspects['title'] = 'Radii of gyration vs. PC1'
     plotaspects['xlabel'] = r'$c_1$'
     plotaspects['ylabel'] = r'$R_g$'
@@ -166,8 +166,9 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['plotdomain'] = 'PCspace'
     plotaspects['legend'] = True
     plotaspects['legend_loc'] = 'upper right'
-    plotaspects['label'] = [r'$f=$'+f'{round(f,2)}'
-                            for f in plotaspects['frule']]
+    plotaspects['label'] = [
+        [r'$f=$'+f'{round(f,2)}' for f in plotaspects['frule']]
+    ]
 
     gyraplot = lib.PlotData(plotaspects, DataObjs)
     gyraplot.CreatePlot()
