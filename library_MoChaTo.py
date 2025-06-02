@@ -37,6 +37,7 @@ class FileData(PCA):
     - q:            values in q-space
     - S:            form factor in q-space
     - clmat:        crosslink matrix
+
     - mS:           mean of form factor in q-space
     - empvar:       empirical variance of form factor in q-space
     - ll:           loop length
@@ -85,16 +86,7 @@ class FileData(PCA):
         self.q = q
         self.S = S
         self.clmat = np.asanyarray(clmat, dtype=np.int_)
-        self.mS = np.mean(S, axis=0)
-        self.empvar = np.sqrt(np.mean((S - self.mS)**2/self.mS**2, axis=0))
-        self.LLCalc()
-        self.fit(self.S)
-        self.PCspaceS = self.transform(self.S)
-        self.Per_Recon()
-        self.c1 = self.PCspaceS[:,0]
-        self.c2 = self.PCspaceS[:,1]
-        self.PC1 = self.components_[0,:]
-        self.PC2 = self.components_[1,:]
+        self.EmpEva()        
 
     @staticmethod
     def ExtractFileData(file:h5py.File, path:str, filter_obj:str, ncomps:int):
@@ -144,37 +136,30 @@ class FileData(PCA):
                         f=InterconDens, q=qKey, S=SData,\
                         clmat=crosslinks)
     
-    def Per_Recon(self) -> None:
+    def EmpEva(self) -> None:
         '''
-        Function to calculate reconstructed date and related quantities from
-        PCA
+        Function to perform evaluation on empiric data and store results in
+        self,
+        updates self with new attributes as follows:
+        - self.mS:          mean of form factor in q-space
+        - self.emperr:      empirical error of form factor in q-space
+        - self.LL:          loop length per SCNP
+        - self.mll:         mean loop length per SCNP
+        - self.nl:          number of loops per SCNP
         '''
-        # calculate reconstructed data
-        reconS = np.matmul(self.PCspaceS, self.components_) + self.mS
+        self.mS = np.mean(self.S, axis=0)
+        self.emperr = np.sqrt(
+            np.mean((self.S - self.mS)**2/self.mS**2, axis=0)
+        )
 
-        # calculate difference between original and reconstructed data
-        diff = self.S - reconS
-
-        # calculate relative reconstruction error in q-space
-        re = np.sqrt(np.mean((diff/self.S)**2, axis=0))
-        # variance of error
-        revar = np.sqrt(np.mean((diff/self.S-re)**2, axis=0))
-
-        # calculate relative mean reonstruction error
-        mre = np.mean(re)
-        # variance of error
-        mrevar = np.mean(revar)
-
-        self.reconS = reconS        # set reconstructed data
-        self.re = re                # set relative reconstruction error
-        self.mre = mre              # set relative mean reconstruction error
-        self.revar = revar          # set variance of relative error
-        self.mrevar = mrevar        # set variance of relative mean error
-    
     def LLCalc(self) -> None:
         '''
         Function to calculate loop length an mean loop length from crosslink
         matrix
+        updates self with new attributes as follows:
+        - self.ll:          loop length per SCNP
+        - self.mll:         mean loop length per SCNP
+        - self.nl:          number of loops per SCNP
         '''
         ll = np.abs(self.clmat[:,:,1] - self.clmat[:,:,2])
         ll = np.split(ll, indices_or_sections=ll.shape[0], axis=0)
@@ -186,13 +171,93 @@ class FileData(PCA):
         # set number of loops
         self.nl = [len(l) for l in self.ll]
     
+    def PerfPCA(self, setname:str, transpose:bool=False) -> None:
+        '''
+        Function to peform PCA () on data and store results in self, PCA is
+        performed as such that samples are along axis 0 and features along
+        axis 1,
+        updates self with new attributes as follows:
+        - self.{setname}c{i} for i = 1, ..., n_components coordinates in
+        PC-space
+        - self.{setname}PC{i} for i = 1, ..., n_components Principal components
+        '''
+        CalcNewData = StrToData(strdata=setname)
+        dataset = CalcNewData(data=self)
+
+        trafo = self.fit_transform(
+            dataset.T if transpose else dataset
+        )
+        for i in range(self.n_components):
+            setattr(self, f'{setname}c{i+1}', trafo[:,i])
+            setattr(self, f'{setname}PC{i+1}', self.components_[i,:])
+        
+    def PerfRecon(self, setname:str) -> None:
+        '''
+        Function to calculate reconstructed date and related quantities from
+        PCA
+        updates self with new attributes as follows:
+        - self.{setname}recondata:      reconstructed data
+        - self.{setname}re:             relative reconstruction error in
+                                        q-space
+        - self.{setname}mre:            relative mean reconstruction error
+        - self.{setname}revar:          variance of relative reconstruction
+                                        error in q-space
+        - self.{setname}mrevar:         variance of relative mean
+                                        reconstruction error
+        '''
+        # get data and mean of data
+        CalcNewData = StrToData(strdata=setname)
+        data = CalcNewData(data=self)
+        mdata = np.mean(data, axis=0)
+
+        # calculate reconstructed data
+        PCspace = np.stack(
+            [
+                getattr(self, f'{setname}c{i+1}')
+                for i in range(self.n_components)
+            ], axis=1
+        )
+        PC = np.stack(
+            [
+                getattr(self, f'{setname}PC{i+1}')
+                for i in range(self.n_components)
+            ], axis=0
+        )
+        recon = np.matmul(PCspace, PC) + mdata
+
+        # calculate difference between original and reconstructed data
+        diff = data - recon
+
+        # calculate relative reconstruction error in q-space
+        re = np.sqrt(np.mean((diff/data)**2, axis=0))
+        # variance of error
+        revar = np.sqrt(np.mean((diff/data-re)**2, axis=0))
+
+        # calculate relative mean reonstruction error
+        mre = np.mean(re)
+        # variance of error
+        mrevar = np.mean(revar)
+
+        setattr(self, f'{setname}recondata', recon)
+        setattr(self, f'{setname}re', re)
+        setattr(self, f'{setname}mre', mre)
+        setattr(self, f'{setname}revar', revar)
+        setattr(self, f'{setname}mrevar', mrevar)
+
+
+        self.reconS = recon         # set reconstructed data
+        self.re = re                # set relative reconstruction error
+        self.mre = mre              # set relative mean reconstruction error
+        self.revar = revar          # set variance of relative error
+        self.mrevar = mrevar        # set variance of relative mean error
+    
     def PerfFit(self, FitFunc, xdata, ydata, fitname) -> None:
         '''
         Funktion to calculate quantities from fit to data
         updates self with new attributes as follows:
         - self.{fitname}{i} fitted values
-        - self.{fitname}err{i} uncertainty of fitted values
-        for i = 0, ..., n-1  fit parameters
+        - self.{fitname}err{i} for i = 0, ..., n-1  fit parameters
+        uncertainty of fitted values
         '''
         xdata = getattr(self, xdata)
         ydata = getattr(self, ydata)
@@ -213,6 +278,40 @@ class FileData(PCA):
                     f.append(fit[j])
 
                     setattr(self, f'{fitname}{j}', f)
+
+
+class StrToData():
+    '''
+    Class to convert string input to equivalently calculated data
+    '''
+    def __init__(self, strdata:str):
+        self.strdata = strdata
+    
+    def __call__(self, data:FileData) -> np.ndarray:
+        if len(self.strdata) == 0:
+            raise ValueError(
+                'Input string for data is empty. Please set it to a valid '
+                'attribute name of FileData object or mathmatical expression.'
+            )
+        elif hasattr(data, self.strdata):
+            if not isinstance(getattr(data, self.strdata), np.ndarray):
+                raise TypeError(
+                    f'Attribute "{self.strdata}" is not of type np.ndarray. '
+                    'Please set it to a numpy array.'
+                )
+            return getattr(data, self.strdata)
+        else:
+            newdata = 1
+            for i in range(len(self.strdata)):
+                if not hasattr(data, self.strdata[i]):
+                    raise AttributeError(
+                        f'Data object {data} has no attribute '
+                        f'{self.strdata[i]}. Note that of the current version '
+                        'only multiplication between single letter attributed '
+                        'datasets expressed as letter sequence is supported.'
+                    )
+                newdata *= getattr(data, self.strdata[i])
+            return newdata
 
 
 class Cycler:
@@ -570,6 +669,11 @@ def filter_func(
         DataObj = FileData.ExtractFileData(file=file, path=name,\
                                            filter_obj=filter_obj,\
                                            ncomps=NComps)
+        
+        DataObj.EmpEva()                # perform empirical evaluation
+        DataObj.LLCalc()                # calculate loop length and mean
+        DataObj.PerfPCA(setname='S')    # perform PCA on form factor
+        DataObj.PerfRecon()             # perform reconstruction of form factor
 
         # print and save results in seperate .txt file
         with open(eva_path + seperator + 'results.txt', 'a') as res_file:

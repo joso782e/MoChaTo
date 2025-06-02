@@ -110,6 +110,10 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         # perform fit for radii of gyration
         obj.PerfFit(FitGyraRad, 'q', 'S', 'Rg')
 
+        # perform PCA on form factor
+        obj.PerfPCA(setname='S')
+        obj.PerfRecon(setname='S')
+
     
     plotaspects = {}
 
