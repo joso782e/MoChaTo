@@ -85,18 +85,6 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         os.makedirs(eva_path)
 
 
-    with open(eva_path + r'\results.txt', 'w') as res_file:
-        res_file.write(f'File: {path}\n')
-        res_file.write('This is a results file of an .hdf5 file evaluation')
-        res_file.write('containing a simulation of 500 monochain molecules\n')
-        res_file.write('and thier resulting structural factor regarding')
-        res_file.write('neutron scattering. It contains some information on\n')
-        res_file.write('the operaiting system and hardware as well as')
-        res_file.write('signifficant quantities for further evaluation.\n\n')
-
-        res_file.write(f'Number of PCA components: 2\n\n')
-
-
     DataObjs = []           # list to store all data objects
     
     
@@ -113,6 +101,8 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         # perform PCA on form factor
         obj.PerfPCA(setname='S')
         obj.PerfRecon(setname='S')
+
+        obj.PerfPCA(setname='qqS')
 
     
     plotaspects = {}
@@ -155,24 +145,23 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['xlabel'] = r'$c_1$'
     plotaspects['ylabel'] = r'$R_g$'
     plotaspects['xdata'] = 'c1'
-    plotaspects['ydata'] = 'Rg1'
+    plotaspects['ydata'] = ['Rg1']
     plotaspects['xlim'] = [None, None]
     plotaspects['ylim'] = [None, None]
     plotaspects['xscale'] = 'linear'
     plotaspects['yscale'] = 'linear'
     plotaspects['scalfac'] = 1.0
-    plotaspects['ls'] = ['None' for i in plotaspects['Nrule']]
-    plotaspects['lw'] = [1.0 for i in plotaspects['Nrule']]
-    plotaspects['marker'] = ['o' for i in plotaspects['Nrule']]
-    plotaspects['ms'] = [3.0 for i in plotaspects['Nrule']]
+    plotaspects['ls'] = 'None'
+    plotaspects['lw'] = 1.0
+    plotaspects['marker'] = 'o'
+    plotaspects['ms'] = 3.0
     plotaspects['color'] = ['dodgerblue', 'limegreen', 'orangered']
     plotaspects['plotdomain'] = 'PCspace'
     plotaspects['sortby'] = 'N'
     plotaspects['legend'] = True
     plotaspects['legend_loc'] = 'upper left'
-    plotaspects['label'] = 'N'
+    plotaspects['label'] = ['N']
 
     gyraplot = lib.PlotData(plotaspects, DataObjs)
-    gyraplot.CreatePlot()
 
 print('Evaluation finished')

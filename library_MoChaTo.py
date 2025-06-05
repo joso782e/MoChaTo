@@ -181,8 +181,8 @@ class FileData(PCA):
         PC-space
         - self.{setname}PC{i} for i = 1, ..., n_components Principal components
         '''
-        CalcNewData = StrToData(strdata=setname)
-        dataset = CalcNewData(data=self)
+        CalcNewData = StrToData(data=self)
+        dataset = CalcNewData.NewData(strdata=setname)
 
         trafo = self.fit_transform(
             dataset.T if transpose else dataset
@@ -206,8 +206,8 @@ class FileData(PCA):
                                         reconstruction error
         '''
         # get data and mean of data
-        CalcNewData = StrToData(strdata=setname)
-        data = CalcNewData(data=self)
+        CalcNewData = StrToData(data=self)
+        data = CalcNewData.NewData(strdata=setname)
         mdata = np.mean(data, axis=0)
 
         # calculate reconstructed data
@@ -284,33 +284,85 @@ class StrToData():
     '''
     Class to convert string input to equivalently calculated data
     '''
-    def __init__(self, strdata:str):
-        self.strdata = strdata
+    def __init__(self, data:FileData):
+        self.data = data
     
-    def __call__(self, data:FileData) -> np.ndarray:
-        if len(self.strdata) == 0:
+    def NewData(self, strdata:str) -> np.ndarray:
+        '''
+        
+        '''
+        if len(strdata) == 0:
+            # raise ValueError if input string is empty
             raise ValueError(
-                'Input string for data is empty. Please set it to a valid '
+                'Input  string for data is empty. Please set it to a valid '
                 'attribute name of FileData object or mathmatical expression.'
             )
-        elif hasattr(data, self.strdata):
-            if not isinstance(getattr(data, self.strdata), np.ndarray):
+        elif hasattr(self.data, strdata):
+            if not isinstance(getattr(self.data, strdata), np.ndarray):
+                # raise TypeError if attribute is not of type np.ndarray
                 raise TypeError(
-                    f'Attribute "{self.strdata}" is not of type np.ndarray. '
+                    f'Attribute "{strdata}" is not of type np.ndarray. '
                     'Please set it to a numpy array.'
                 )
-            return getattr(data, self.strdata)
-        else:
+            # return attribute
+            return getattr(self.data, strdata)
+        elif '(' and ')' in strdata:
+            # split string by '(', remove ')' and asume muliplication between
+            # all parts of the splitted string
             newdata = 1
-            for i in range(len(self.strdata)):
-                if not hasattr(data, self.strdata[i]):
+            strdatas = strdata.split('(')
+            for strdata in strdatas:
+                strdata = strdata.replace(')', '')
+                # recursively call NewData for each part of the string and
+                # multiply all values
+                newdata *= self.NewData(strdata=strdata)
+        elif '+' in strdata:
+            # split string by '+' and sum up all values
+            newdata = 0
+            strdatas = strdata.split('+')
+            for strdata in strdatas:
+                # recursively call NewData for each part of the string and add
+                # up all values
+                newdata += self.NewData(strdata=strdata)
+            return newdata
+        elif '-' in strdata:
+            # split string by '-' and subtract all values
+            newdata = 0
+            strdatas = strdata.split('-')
+            for i, strdata in enumerate(strdatas):
+                # recursively call NewData for each part of the string and
+                # substract all values
+                if i == 0 and strdata[0] != '-':
+                    newdata += self.NewData(strdata=strdata)
+                else:
+                    newdata -= self.NewData(strdata=strdata)
+            return newdata
+        else:
+            # split string by '*' and multiply all values
+            newdata = 1
+            strdatas = strdata.replace('*', '')
+            for i in range(len(strdatas)):
+                if hasattr(self.data, strdata[i]):
+                    if not isinstance(
+                        getattr(self.data, strdata[i]), np.ndarray
+                    ):
+                        # raise TypeError if attribute is not of type
+                        # np.ndarray
+                        raise TypeError(
+                            f'Attribute "{strdata[i]}" is not of type np.ndarray. '
+                            'Please set it to a numpy array.'
+                        )
+                    # recursively call NewData for each part of the string and
+                    # multiply all values
+                    newdata *= getattr(self.data, strdata[i])
+                else:
+                    # raise AttributeError if attribute is not found in
+                    # FileData object
                     raise AttributeError(
-                        f'Data object {data} has no attribute '
-                        f'{self.strdata[i]}. Note that of the current version '
-                        'only multiplication between single letter attributed '
-                        'datasets expressed as letter sequence is supported.'
+                        f'Attribute "{strdata}" not found in FileData object. '
+                        'Please set it to a valid attribute name of FileData '
+                        'object or mathmatical expression.'
                     )
-                newdata *= getattr(data, self.strdata[i])
             return newdata
 
 
@@ -333,12 +385,35 @@ class Cycler:
         self.count += 1
         return item
     
+    def Current(self):
+        '''
+        Function to get current item in iterable
+        '''
+        if self.count >= len(self.iterable):
+            self.count = 0
+        return self.iterable[self.count]
+    
+    def Increase(self):
+        '''
+        Function to increase count by 1
+        '''
+        if self.count >= len(self.iterable):
+            self.count = 0
+        else:
+            self.count += 1
+    
     def FullCycle(self):
         '''
         Function to perform full cycle through iterable
         '''
         for i in range(len(self.iterable)):
             yield self.Cycle()
+    
+    def Reset(self):
+        '''
+        Function to reset cycler
+        '''
+        self.count = 0
 
 
 class PlotRule:
@@ -443,9 +518,9 @@ class PlotData:
                 'Please set sortby to "N" or "f"'
             )        
 
-        self.SetData(dataobjs=dataobjs)
+        self.SetDataObjs(dataobjs=dataobjs)
     
-    def SetData(self, dataobjs:list[FileData]) -> None:
+    def SetDataObjs(self, dataobjs:list[FileData]) -> None:
         '''
         Function to update data attributes in PlotData object
         '''
@@ -463,6 +538,132 @@ class PlotData:
         ]
 
         self.data = data
+
+    def GetData(self) -> None:
+        '''
+    
+        '''
+        rule = self.rule
+
+        xdata = []      # list to store xdata
+        ydata = []      # list to store ydata
+        labels = []     # list to store labels for data sets
+        ls = []         # list to store line styles
+        lw = []         # list to store line widths
+        marker = []     # list to store marker types
+        ms = []         # list to store marker sizes
+        color = []      # list to store colors for data sets
+
+        # create cyclers for line styles, line widths, marker types,
+        # marker sizes and colors
+        lscycler = Cycler(
+            rule.ls if isinstance(rule.ls, list) else [rule.ls]
+        )
+        lwcycler = Cycler(
+            rule.lw if isinstance(rule.lw, list) else [rule.lw]
+        )
+        markercycler = Cycler(
+            rule.marker if isinstance(rule.marker, list) else [rule.marker]
+        )
+        mscycler = Cycler(
+            rule.ms if isinstance(rule.ms, list) else [rule.ms]
+        )
+        colorcycler = Cycler(
+            rule.color if isinstance(rule.color, list) else [rule.color]
+        )
+
+
+        for i in range(len(rule.ydata)):
+            for j in getattr(rule, f'{rule.sortby}rule'):
+                # check if data set with current rule exists
+                if len([
+                    obj for obj in self.data
+                    if getattr(obj, rule.sortby) == j
+                ]) == 0:
+                    continue
+                # get xdata for current rule and append to xdata list
+                xdata.append(
+                    np.stack([
+                        getattr(obj, rule.xdata) for obj in self.data
+                        if getattr(obj, rule.sortby) == j
+                    ], axis=0)
+                )
+                # get ydata for current rule and append to ydata list
+                ydata.append(
+                    np.stack([
+                        getattr(obj, rule.ydata[i]) for obj in self.data
+                        if getattr(obj, rule.sortby) == j
+                    ], axis=0)
+                )
+                # create label for current rule and append to labels list
+                if len(rule.ydata) > 1:
+                    lstr = f'${rule.label[i]}$ at ${rule.sortby}={round(j,2)}$'
+                else:
+                    lstr = f'${rule.sortby}={round(j,2)}$'
+                labels.append([
+                    lstr for obj in self.data if getattr(obj, rule.sortby) == j
+                ])
+                # append line styles, line widths, marker types, marker sizes
+                # and colors to corresponding lists
+                ls.append(
+                    [lscycler.Current()
+                     if ydata[-1].ndim == 1 else lscycler.Current()
+                     for _ in range(ydata[-1].shape[0])]
+                )
+                lw.append(
+                    [lwcycler.Current()
+                     if ydata[-1].ndim == 1 else lwcycler.Current()
+                     for _ in range(ydata[-1].shape[0])]
+                )
+                marker.append(
+                    [markercycler.Current()
+                     if ydata[-1].ndim == 1 else markercycler.Current()
+                     for _ in range(ydata[-1].shape[0])]
+                )
+                ms.append(
+                    [mscycler.Current()
+                     if ydata[-1].ndim == 1 else mscycler.Current()
+                     for _ in range(ydata[-1].shape[0])]
+                )
+                color.append(
+                    [colorcycler.Current()
+                     if ydata[-1].ndim == 1 else colorcycler.Current()
+                     for _ in range(ydata[-1].shape[0])]
+                )
+                # increase cyclers if length of rule attributes does not match
+                # length of ydata
+                if len(rule.ls) != len(rule.ydata):
+                    lscycler.Increase()
+                if len(rule.lw) != len(rule.ydata):
+                    lwcycler.Increase()
+                if len(rule.marker) != len(rule.ydata):
+                    markercycler.Increase()
+                if len(rule.ms) != len(rule.ydata):
+                    mscycler.Increase()
+                if len(rule.color) != len(rule.ydata):
+                    colorcycler.Increase()
+            # increase cyclers if length of rule attributes matches
+            # length of ydata      
+            if len(rule.ls) == len(rule.ydata):
+                lscycler.Increase()
+            if len(rule.lw) == len(rule.ydata):
+                lwcycler.Increase()
+            if len(rule.marker) == len(rule.ydata):
+                markercycler.Increase()
+            if len(rule.ms) == len(rule.ydata):
+                mscycler.Increase()
+            if len(rule.color) == len(rule.ydata):
+                colorcycler.Increase()
+
+        self.xdata = xdata
+        self.ydata = ydata
+        self.labels = labels
+        self.ls = ls
+        self.lw = lw
+        self.marker = marker
+        self.ms = ms
+        self.color = color
+
 
     def CreatePlot(
             self, eva_path:str=config['eva_path'], system:str=config['system']
@@ -497,40 +698,15 @@ class PlotData:
         ax.set_ylabel(rule.ylabel)
         ax.grid(axis='both', ls='--', lw=0.5, color='grey')
 
-        xdata = []
-        ydata = []
-        labels = []
+        xdata = self.xdata
+        ydata = self.ydata
+        labels = self.labels
+        ls = self.ls
+        lw = self.lw
+        marker = self.marker
+        ms = self.ms
+        color = self.color
 
-        for i in getattr(rule, f'{rule.sortby}rule'):
-            if len([
-                obj for obj in self.data
-                if getattr(obj, rule.sortby) == i
-            ]) == 0:
-                continue
-            xdata.append(
-                np.stack([
-                    getattr(obj, rule.xdata) for obj in self.data
-                    if getattr(obj, rule.sortby) == i
-                ], axis=0)
-            )
-            ydata.append(
-                np.stack([
-                    getattr(obj, rule.ydata) for obj in self.data
-                    if getattr(obj, rule.sortby) == i
-                ], axis=0)
-            )
-            labels.append([
-                f'${rule.label}={round(getattr(obj, rule.label),2)}$'
-                for obj in self.data if getattr(obj, rule.sortby) == i
-            ])
-
-        ax.set_prop_cycle(
-            color=rule.color,
-            ls=rule.ls,
-            lw=rule.lw,
-            marker=rule.marker,
-            ms=rule.ms,
-        )
 
         for i in range(len(xdata)):
             # asume more data points then samples
@@ -547,8 +723,7 @@ class PlotData:
                         f'{ydata[i].shape} can not be broadcast together.'
                     )
             
-            
-            
+                        
             # plot data as diagram or histogram
             if rule.plot == 'diag':
                 # dicide wether to turn auto scale on or not
@@ -574,15 +749,15 @@ class PlotData:
                     # plot data in Kratky plot
                     ydata[i] = ydata[i]*xdata[i]**2
                     ax.loglog(
-                        xdata[i], rule.scalfac*ydata[i], color=rule.color[i],
-                        linestyle=rule.ls[i], lw=rule.lw[i],
-                        marker=rule.marker[i], ms=rule.ms[i],
+                        xdata[i], rule.scalfac*ydata[i], color=color[i],
+                        linestyle=ls[i], lw=lw[i], marker=marker[i], ms=ms[i],
                         label=labels[i]
                     )
                 else:
                     # plot data in normal plot
                     ax.plot(
-                        xdata[i], rule.scalfac*ydata[i],
+                        xdata[i], rule.scalfac*ydata[i], color=color[i],
+                        linestyle=ls[i], lw=lw[i], marker=marker[i], ms=ms[i],
                         label=labels[i]
                     )
                     ax.set_xscale(rule.xscale)
@@ -595,7 +770,7 @@ class PlotData:
                 )
                 ax.hist(
                     ydata[i].flatten(), bins=bins, density=True,
-                    color=rule.color[i], label=labels
+                    color=color[i], label=labels
                 )
                 # display mean value and calculate optimal position for text
                 # and line
@@ -672,22 +847,7 @@ def filter_func(
         
         DataObj.EmpEva()                # perform empirical evaluation
         DataObj.LLCalc()                # calculate loop length and mean
-        DataObj.PerfPCA(setname='S')    # perform PCA on form factor
-        DataObj.PerfRecon()             # perform reconstruction of form factor
-
-        # print and save results in seperate .txt file
-        with open(eva_path + seperator + 'results.txt', 'a') as res_file:
-            res_file.write(f'chain length:              {DataObj.N}\n' +\
-                           f'Connector distance:        {DataObj.f}\n' +\
-                            'empirical variance:         ' +\
-                           f'{round(np.mean(DataObj.empvar),6)}\n' +\
-                           r'$\langle e_S\rangle$:      ' +\
-                           f'{round(DataObj.mre,6)}\n' +\
-                           r'$\sigma_1$:                ' +\
-                           f'{round(DataObj.explained_variance_ratio_[0],6)}'\
-                    '\n' + r'$\sigma_2$:                ' +\
-                           f'{round(DataObj.explained_variance_ratio_[1],6)}')
-            res_file.write('\n' + '-'*79 + '\n\n\n')
+        
 
         # print separator line to indicate end of one condition evaluation in 
         # terminal for debugging
