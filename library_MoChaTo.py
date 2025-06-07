@@ -171,7 +171,10 @@ class FileData(PCA):
         # set number of loops
         self.nl = [len(l) for l in self.ll]
     
-    def PerfPCA(self, setname:str, transpose:bool=False) -> None:
+    def PerfPCA(
+            self, setname:str, args:list[str], operant:str,
+            transpose:bool=False
+        ) -> None:
         '''
         Function to peform PCA () on data and store results in self, PCA is
         performed as such that samples are along axis 0 and features along
@@ -181,8 +184,23 @@ class FileData(PCA):
         PC-space
         - self.{setname}PC{i} for i = 1, ..., n_components Principal components
         '''
-        CalcNewData = StrToData(data=self)
-        dataset = CalcNewData.NewData(strdata=setname)
+        if operant == '+':
+            operant = np.add
+            dataset = 0
+        elif operant == '-':
+            operant = np.subtract
+            dataset = 0
+        elif operant == '*':
+            operant = np.multiply
+            dataset = 1
+        
+        if operant not in [np.add, np.subtract, np.multiply]:
+            dataset = getattr(self, args[0])
+        else:
+            for arg in args:
+                argset = getattr(self, arg)
+                dataset = operant(dataset, argset)
+                setattr(self, setname, dataset)
 
         trafo = self.fit_transform(
             dataset.T if transpose else dataset
@@ -206,8 +224,7 @@ class FileData(PCA):
                                         reconstruction error
         '''
         # get data and mean of data
-        CalcNewData = StrToData(data=self)
-        data = CalcNewData.NewData(strdata=setname)
+        data = getattr(self, setname)
         mdata = np.mean(data, axis=0)
 
         # calculate reconstructed data
@@ -251,7 +268,10 @@ class FileData(PCA):
         self.revar = revar          # set variance of relative error
         self.mrevar = mrevar        # set variance of relative mean error
     
-    def PerfFit(self, FitFunc, xdata, ydata, fitname) -> None:
+    def PerfFit(
+            self, FitFunc, xdata:str, ydata:str,  fitname:str,
+            xlim:tuple[float]=(None,None), ylim:tuple[float]=(None,None)
+        ) -> None:
         '''
         Funktion to calculate quantities from fit to data
         updates self with new attributes as follows:
@@ -259,8 +279,76 @@ class FileData(PCA):
         - self.{fitname}err{i} for i = 0, ..., n-1  fit parameters
         uncertainty of fitted values
         '''
+        # check if FitFunc is callable
+        if not callable(FitFunc):
+            raise TypeError(
+                f'Input "{FitFunc}" for FitFunc not callable. '
+                'Please set FitFunc to a callable function'
+            )
+        # check if xdata and ydata are attributes of self
+        if not hasattr(self, xdata):
+            raise AttributeError(
+                f'Input "{xdata}" for xdata not as attribute in FileData '
+                'object. Please set xdata to one of the following values:'
+                f'\n{dir(self)}'
+                '\n, specificly to "c1"/"c2" for coordinate 1/2 in PC-space '
+                'or to "PC1"/"PC2" for principal component 1/2'
+            )
+        if not hasattr(self, ydata):
+            raise AttributeError(
+                f'Input "{ydata}" for ydata not as attribute in FileData '
+                'object. Please set ydata to one of the following values:'
+                f'\n{dir(self)}'
+                '\n, specificly to "c1"/"c2" for coordinate 1/2 in PC-space '
+                'or to "PC1"/"PC2" for principal component 1/2'
+            )
+        
+        xupper = xlim[0]
+        xlower = xlim[1]
+        yupper = ylim[0]
+        ylower = ylim[1]
+
+        # get xdata and ydata from self
         xdata = getattr(self, xdata)
         ydata = getattr(self, ydata)
+
+        if xupper and xlower and yupper and ylower:
+            Warning(
+                'xlim and ylim set, data will be filtered to fit in limits. '
+                'It is your responsability to ensure that the filtered xdata '
+                'and ydata have the same shape!!!'
+            )
+            # check if xlim and ylim are tuples of floats
+            if (type(xupper), type(xlower)) != (float, float):
+                raise TypeError(
+                    f'Input "{xlim}" for xlim not of type tuple of floats. '
+                    'Please set xlim to a tuple of floats'
+                )
+            if (type(yupper), type(ylower)) != (float, float):
+                raise TypeError(
+                    f'Input "{ylim}" for ylim not of type tuple of floats. '
+                    'Please set ylim to a tuple of floats'
+                )
+            xdata = xdata[(xdata >= xlower) & (xdata <= xupper)]
+            ydata = ydata[(ydata >= ylower) & (ydata <= yupper)]
+        elif xupper and xlower:
+            # check if xlim is tuple of floats
+            if (type(xupper), type(xlower)) != (float, float):
+                raise TypeError(
+                    f'Input "{xlim}" for xlim not of type tuple of floats. '
+                    'Please set xlim to a tuple of floats'
+                )
+            xdata = xdata[(xdata >= xlower) & (xdata <= xupper)]
+            ydata = ydata[(xdata >= xlower) & (xdata <= xupper)]
+        elif yupper and ylower:
+            # check if ylim is tuple of floats
+            if (type(yupper), type(ylower)) != (float, float):
+                raise TypeError(
+                    f'Input "{ylim}" for ylim not of type tuple of floats. '
+                    'Please set ylim to a tuple of floats'
+                )
+            xdata = xdata[(ydata >= ylower) & (ydata <= yupper)]
+            ydata = ydata[(ydata >= ylower) & (ydata <= yupper)]
 
         for i in range(ydata.shape[0]):
             fit, _ = opt.curve_fit(
@@ -278,92 +366,6 @@ class FileData(PCA):
                     f.append(fit[j])
 
                     setattr(self, f'{fitname}{j}', f)
-
-
-class StrToData():
-    '''
-    Class to convert string input to equivalently calculated data
-    '''
-    def __init__(self, data:FileData):
-        self.data = data
-    
-    def NewData(self, strdata:str) -> np.ndarray:
-        '''
-        
-        '''
-        if len(strdata) == 0:
-            # raise ValueError if input string is empty
-            raise ValueError(
-                'Input  string for data is empty. Please set it to a valid '
-                'attribute name of FileData object or mathmatical expression.'
-            )
-        elif hasattr(self.data, strdata):
-            if not isinstance(getattr(self.data, strdata), np.ndarray):
-                # raise TypeError if attribute is not of type np.ndarray
-                raise TypeError(
-                    f'Attribute "{strdata}" is not of type np.ndarray. '
-                    'Please set it to a numpy array.'
-                )
-            # return attribute
-            return getattr(self.data, strdata)
-        elif '(' and ')' in strdata:
-            # split string by '(', remove ')' and asume muliplication between
-            # all parts of the splitted string
-            newdata = 1
-            strdatas = strdata.split('(')
-            for strdata in strdatas:
-                strdata = strdata.replace(')', '')
-                # recursively call NewData for each part of the string and
-                # multiply all values
-                newdata *= self.NewData(strdata=strdata)
-        elif '+' in strdata:
-            # split string by '+' and sum up all values
-            newdata = 0
-            strdatas = strdata.split('+')
-            for strdata in strdatas:
-                # recursively call NewData for each part of the string and add
-                # up all values
-                newdata += self.NewData(strdata=strdata)
-            return newdata
-        elif '-' in strdata:
-            # split string by '-' and subtract all values
-            newdata = 0
-            strdatas = strdata.split('-')
-            for i, strdata in enumerate(strdatas):
-                # recursively call NewData for each part of the string and
-                # substract all values
-                if i == 0 and strdata[0] != '-':
-                    newdata += self.NewData(strdata=strdata)
-                else:
-                    newdata -= self.NewData(strdata=strdata)
-            return newdata
-        else:
-            # split string by '*' and multiply all values
-            newdata = 1
-            strdatas = strdata.replace('*', '')
-            for i in range(len(strdatas)):
-                if hasattr(self.data, strdata[i]):
-                    if not isinstance(
-                        getattr(self.data, strdata[i]), np.ndarray
-                    ):
-                        # raise TypeError if attribute is not of type
-                        # np.ndarray
-                        raise TypeError(
-                            f'Attribute "{strdata[i]}" is not of type np.ndarray. '
-                            'Please set it to a numpy array.'
-                        )
-                    # recursively call NewData for each part of the string and
-                    # multiply all values
-                    newdata *= getattr(self.data, strdata[i])
-                else:
-                    # raise AttributeError if attribute is not found in
-                    # FileData object
-                    raise AttributeError(
-                        f'Attribute "{strdata}" not found in FileData object. '
-                        'Please set it to a valid attribute name of FileData '
-                        'object or mathmatical expression.'
-                    )
-            return newdata
 
 
 class Cycler:

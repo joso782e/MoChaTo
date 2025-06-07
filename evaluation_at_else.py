@@ -89,8 +89,11 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     
     
     with h5py.File(path, 'r') as file:
-        file.visit(lambda x: DataObjs.append(lib.filter_func(name=x,\
-                   file=file)))
+        file.visit(
+            lambda x: DataObjs.append(
+                lib.filter_func(name=x, file=file)
+            )
+        )
         
     DataObjs = [obj for obj in DataObjs if obj is not None]     # remove None
 
@@ -99,10 +102,12 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         obj.PerfFit(FitGyraRad, 'q', 'S', 'Rg')
 
         # perform PCA on form factor
-        obj.PerfPCA(setname='S')
+        obj.PerfPCA(setname='S', operant='None', args=['S'])
         obj.PerfRecon(setname='S')
 
-        obj.PerfPCA(setname='qqS')
+        obj.PerfPCA(setname='qqS', operant='*', args=['q', 'q', 'S'])
+
+        obj.PerfFit(FitFunc=FitGyraRad, xdata='q', ydata='S')
 
     
     plotaspects = {}
@@ -144,7 +149,7 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['title'] = 'Radii of gyration vs. PC1'
     plotaspects['xlabel'] = r'$c_1$'
     plotaspects['ylabel'] = r'$R_g$'
-    plotaspects['xdata'] = 'c1'
+    plotaspects['xdata'] = 'Sc1'
     plotaspects['ydata'] = ['Rg1']
     plotaspects['xlim'] = [None, None]
     plotaspects['ylim'] = [None, None]
