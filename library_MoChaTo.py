@@ -170,7 +170,31 @@ class FileData(PCA):
         self.mll = ([np.mean(l) if len(l) > 0 else 0 for l in self.ll])
         # set number of loops
         self.nl = [len(l) for l in self.ll]
-    
+
+    def BalanceProfile(self) -> None:
+        '''
+        
+        '''
+
+        balprofile = np.zeros((self.clmat.shape[0], self.N+1))
+
+        for i in range(balprofile.shape[0]):
+            for j in range(self.clmat.shape[1]):
+                balprofile[i,:] += np.array([
+                    1 if k >= self.clmat[i,j,1] and k <= self.clmat[i,j,2]
+                    else 0 for k in range(balprofile.shape[1])
+                ])
+                balprofile[i,:] /= self.clmat[
+                    np.nonzero(self.clmat[i,:,1])
+                ].shape[1]
+
+        balancepoint = np.sum(
+            balprofile*np.linspace(1,self.N,self.N), axis=1
+        )/np.sum(balprofile, axis=1)
+
+        self.balanceprofile = balprofile
+        self.balancepoint = balancepoint
+
     def PerfPCA(
             self, setname:str, args:list[str], operant:str,
             transpose:bool=False
@@ -179,6 +203,17 @@ class FileData(PCA):
         Function to peform PCA () on data and store results in self, PCA is
         performed as such that samples are along axis 0 and features along
         axis 1,
+        Input:
+        - setname (dtype = str)...      categoty name of results
+        - args (dtype = list[str])...   list of attributes to be used to
+                                        manipulate data for PCA
+        - operant (dtype = str)...      operant to be used to manipulate data
+                                        before PCA, can be '+', '-', '*', or
+                                        'None' for no manipulation
+        - transpose (dtype = bool)...   if True, data is transposed before
+                                        PCA, default is False
+
+        Output:
         updates self with new attributes as follows:
         - self.{setname}c{i} for i = 1, ..., n_components coordinates in
         PC-space
@@ -349,7 +384,16 @@ class FileData(PCA):
                 )
             xdata = xdata[(ydata >= ylower) & (ydata <= yupper)]
             ydata = ydata[(ydata >= ylower) & (ydata <= yupper)]
+        else:
+            xupper = np.inf if xupper is None else xupper
+            xlower = -np.inf if xlower is None else xlower
+            yupper = np.inf if yupper is None else yupper
+            ylower = -np.inf if ylower is None else ylower
 
+            xdata = xdata[(xdata >= xlower) & (xdata <= xupper)]
+            ydata = ydata[(ydata >= ylower) & (ydata <= yupper)]
+
+        print(xdata.shape, ydata.shape)
         for i in range(ydata.shape[0]):
             fit, _ = opt.curve_fit(
                 FitFunc, xdata=xdata, ydata=ydata[i,:]
@@ -812,7 +856,7 @@ def filter_func(
     string 'filter_obj' and perform data collection, evaluation and plotting
     on them
 
-    input variables:
+    Input:
     name (dtype = str)...           name of data group to be filtered
     file (dtype = h5py.File)...     input file
     NComps (dtype = int)...         number of principal components to perform 
@@ -867,7 +911,7 @@ def save_plot(
     '''
     Function to safe plot
 
-    input variables:
+    Input:
     fig (dtype = plt.Figure)...     figure with ploted data
     name (dtype = str)...           name of plot file
     path (dtype = str)...           path to safe plot file
