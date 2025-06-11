@@ -99,15 +99,20 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
 
     for obj in DataObjs:
         # perform fit for radii of gyration
-        obj.PerfFit(FitGyraRad, 'q', 'S', 'Rg')
+        obj.PerfFit(
+            FitFunc=FitGyraRad, xdata='q', ydata='S', fitname='Rg',
+            xlim=(None, 2e-2)
+        )
 
         # perform PCA on form factor
         obj.PerfPCA(setname='S', operant='None', args=['S'])
         obj.PerfRecon(setname='S')
-
-        obj.PerfPCA(setname='qqS', operant='*', args=['q', 'q', 'S'])
-
-        obj.PerfFit(FitFunc=FitGyraRad, xdata='q', ydata='S')
+        
+        # perform blockiness calculation
+        obj.Blockiness(blocktype=1, normalize=True)
+        obj.Blockiness(blocktype=4, normalize=True)
+        obj.Blockiness(blocktype=2, normalize=True)
+        obj.Blockiness(blocktype=3, normalize=True)
 
     
     plotaspects = {}
@@ -144,13 +149,13 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     # legend_loc:   -str disribing the legends location in the plot
     # label:        -str for what to use in labeling data sets: either N or f
     
-    plotaspects['Nrule'] = [40, 100, 200]
-    plotaspects['frule'] = [1/18]
-    plotaspects['title'] = 'Radii of gyration vs. PC1'
-    plotaspects['xlabel'] = r'$c_1$'
-    plotaspects['ylabel'] = r'$R_g$'
-    plotaspects['xdata'] = 'Sc1'
-    plotaspects['ydata'] = ['Rg1']
+    plotaspects['Nrule'] = [100]
+    plotaspects['frule'] = [1/4, 1/8, 1/12]
+    plotaspects['title']= 'Normalized crosslinker blockiness vs. PC2'
+    plotaspects['xlabel'] = r'$c_2$'
+    plotaspects['ylabel'] = r'$\beta_1$'
+    plotaspects['xdata'] = 'Sc2'
+    plotaspects['ydata'] = ['b1']
     plotaspects['xlim'] = [None, None]
     plotaspects['ylim'] = [None, None]
     plotaspects['xscale'] = 'linear'
@@ -162,11 +167,13 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['ms'] = 3.0
     plotaspects['color'] = ['dodgerblue', 'limegreen', 'orangered']
     plotaspects['plotdomain'] = 'PCspace'
-    plotaspects['sortby'] = 'N'
+    plotaspects['sortby'] = 'f'
     plotaspects['legend'] = True
     plotaspects['legend_loc'] = 'upper left'
-    plotaspects['label'] = ['N']
+    plotaspects['label'] = ['f']
 
     gyraplot = lib.PlotData(plotaspects, DataObjs)
+    gyraplot.GetData()          # get data from FileData objects
+    gyraplot.CreatePlot()       # plot data as graph
 
 print('Evaluation finished')

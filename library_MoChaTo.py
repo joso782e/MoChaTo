@@ -58,6 +58,7 @@ class FileData(PCA):
         q:np.ndarray,
         S:np.ndarray,
         clmat:np.ndarray,
+        sequence:np.ndarray,
         n_components=None,
         *,
         copy=True,
@@ -82,10 +83,12 @@ class FileData(PCA):
         )
         self.condi = condi
         self.N = N
+        self.position = np.arange(1, N+1)   # position of spheres in chain
         self.f = 1/f
         self.q = q
         self.S = S
         self.clmat = np.asanyarray(clmat, dtype=np.int_)
+        self.sequence = sequence
         self.EmpEva()        
 
     @staticmethod
@@ -132,9 +135,13 @@ class FileData(PCA):
         # get crosslink matrix
         crosslinks = file[path[:-l]+'crosslinks']
 
-        return FileData(n_components=ncomps, condi=Cond, N=NChain,\
-                        f=InterconDens, q=qKey, S=SData,\
-                        clmat=crosslinks)
+        # get monomer sequence
+        sequence = np.squeeze(file[path[:-l]+'sequence'])
+
+        return FileData(
+            n_components=ncomps, condi=Cond, N=NChain, f=InterconDens, q=qKey,
+            S=SData, clmat=crosslinks, sequence=sequence
+        )
     
     def EmpEva(self) -> None:
         '''
@@ -194,6 +201,78 @@ class FileData(PCA):
 
         self.balanceprofile = balprofile
         self.balancepoint = balancepoint
+    
+    def Blockiness(self, blocktype:int, normalize:bool) -> None:
+        '''
+        Function to calculate blockiness of SCNP from sequences
+
+        Input:
+        blocktype (dtype = int)...          type of block interface,
+                                        1 for blockiness of crosslinker
+                                        sequence 
+                                        2 for reactive blockiness
+                                        3 for crosslinker blockiness
+                                        4 for activeted blockiness
+        
+        Output:
+        updates self with new attributes as follows:
+        - self.b{blocktype}:...          blockiness type x of SCNP
+        '''
+        sequence = self.sequence
+        b = np.apply_along_axis(
+            lambda x: Blockiness(
+                sequence=x, blocktype=blocktype, f=self.f, normalize=normalize
+            ), axis=1, arr=sequence
+        )
+
+        setattr(self, f'b{blocktype}', b)
+
+    def BinData(
+            self, xdata:str, ydata:str, bins:np.ndarray,
+            xlower:float=None, xupper:float=None
+    ) -> None:
+        '''
+        Function to bin ydata along given xdata axis, calculate their mean and
+        variance for each bin seperately
+
+        Input:
+        xdata (dtype = str)...          str describing atribute of FileData
+                                        object containing x-values
+        ydata (dtype = str)...          str describing atribute of FileData
+                                        object containing y-values
+        bins (dtype = np.ndarray)...    int or array-like
+                                        - if int: sets number of evenly spaced
+                                        bins
+                                        - if array-like: sets bin edges
+
+        Output:
+        updates self with new attributes as follows:
+        - self.bin{xdata}...
+        '''
+        xdata = getattr(self, xdata)
+        ydata = getattr(self, ydata)
+
+        xmin = xlower if xlower else np.min(xdata)
+        xmax = xupper if xupper else np.max(xdata)
+
+        if isinstance(bins, int):
+            xdata = np.linspace(xmin, xmax, bins+1)
+        else:
+            xdata = bins
+        
+        setattr(self, f'binmean{xdata}', (xdata[1:] + xdata[:-1])/2)
+
+        y = np.zeros_like(xdata[1:])
+        yerr = np.zeros_like(xdata[1:])
+
+        for i in range(len(xdata[1:])):
+            y[i] = np.mean(ydata[np.nonzero(xdata >= xmin and xdata <= xmax)])
+            yerr[i] = np.sqrt(
+                np.var(ydata[np.nonzero(xdata >= xmin and xdata <= xmax)])
+            )
+        
+        setattr(self, f'binmean{ydata}', y)
+        setattr(self, f'binerr{ydata}', yerr)
 
     def PerfPCA(
             self, setname:str, args:list[str], operant:str,
@@ -202,9 +281,10 @@ class FileData(PCA):
         '''
         Function to peform PCA () on data and store results in self, PCA is
         performed as such that samples are along axis 0 and features along
-        axis 1,
+        axis 1
+
         Input:
-        - setname (dtype = str)...      categoty name of results
+        - setname (dtype = str)...      category name of results
         - args (dtype = list[str])...   list of attributes to be used to
                                         manipulate data for PCA
         - operant (dtype = str)...      operant to be used to manipulate data
@@ -248,6 +328,12 @@ class FileData(PCA):
         '''
         Function to calculate reconstructed date and related quantities from
         PCA
+
+        Input:
+        setname (dtype = str)...        category name of PCA set to perform
+                                        reconstruction on
+
+        Output:
         updates self with new attributes as follows:
         - self.{setname}recondata:      reconstructed data
         - self.{setname}re:             relative reconstruction error in
@@ -304,11 +390,24 @@ class FileData(PCA):
         self.mrevar = mrevar        # set variance of relative mean error
     
     def PerfFit(
-            self, FitFunc, xdata:str, ydata:str,  fitname:str,
-            xlim:tuple[float]=(None,None), ylim:tuple[float]=(None,None)
-        ) -> None:
+            self, FitFunc, xdata:str, ydata:str, fitname:str,
+            xlim:tuple[float]=(None, None)
+    ) -> None:
         '''
         Funktion to calculate quantities from fit to data
+
+        Input:
+        FitFunc (callable)...       callable representing the function to be
+                                    fitted, for further reference see
+                                    documentation of scipy.optimize.curve_fit()
+        xdata (dtype = str)...      str describing atribute of FileData object
+                                    containing x-values
+        ydata (dtype = str)...      str describing atribute of FileData object
+                                    containing x-values
+        fitname (dtype = str)...    string determining attribute name in
+                                    FileData object for fit parameters
+
+        Output:
         updates self with new attributes as follows:
         - self.{fitname}{i} fitted values
         - self.{fitname}err{i} for i = 0, ..., n-1  fit parameters
@@ -338,62 +437,18 @@ class FileData(PCA):
                 'or to "PC1"/"PC2" for principal component 1/2'
             )
         
-        xupper = xlim[0]
-        xlower = xlim[1]
-        yupper = ylim[0]
-        ylower = ylim[1]
+        xlower = -np.inf if xlim[0] is None else xlim[0]
+        xupper = np.inf if xlim[1] is None else xlim[1]
 
         # get xdata and ydata from self
         xdata = getattr(self, xdata)
         ydata = getattr(self, ydata)
 
-        if xupper and xlower and yupper and ylower:
-            Warning(
-                'xlim and ylim set, data will be filtered to fit in limits. '
-                'It is your responsability to ensure that the filtered xdata '
-                'and ydata have the same shape!!!'
-            )
-            # check if xlim and ylim are tuples of floats
-            if (type(xupper), type(xlower)) != (float, float):
-                raise TypeError(
-                    f'Input "{xlim}" for xlim not of type tuple of floats. '
-                    'Please set xlim to a tuple of floats'
-                )
-            if (type(yupper), type(ylower)) != (float, float):
-                raise TypeError(
-                    f'Input "{ylim}" for ylim not of type tuple of floats. '
-                    'Please set ylim to a tuple of floats'
-                )
-            xdata = xdata[(xdata >= xlower) & (xdata <= xupper)]
-            ydata = ydata[(ydata >= ylower) & (ydata <= yupper)]
-        elif xupper and xlower:
-            # check if xlim is tuple of floats
-            if (type(xupper), type(xlower)) != (float, float):
-                raise TypeError(
-                    f'Input "{xlim}" for xlim not of type tuple of floats. '
-                    'Please set xlim to a tuple of floats'
-                )
-            xdata = xdata[(xdata >= xlower) & (xdata <= xupper)]
-            ydata = ydata[(xdata >= xlower) & (xdata <= xupper)]
-        elif yupper and ylower:
-            # check if ylim is tuple of floats
-            if (type(yupper), type(ylower)) != (float, float):
-                raise TypeError(
-                    f'Input "{ylim}" for ylim not of type tuple of floats. '
-                    'Please set ylim to a tuple of floats'
-                )
-            xdata = xdata[(ydata >= ylower) & (ydata <= yupper)]
-            ydata = ydata[(ydata >= ylower) & (ydata <= yupper)]
-        else:
-            xupper = np.inf if xupper is None else xupper
-            xlower = -np.inf if xlower is None else xlower
-            yupper = np.inf if yupper is None else yupper
-            ylower = -np.inf if ylower is None else ylower
-
-            xdata = xdata[(xdata >= xlower) & (xdata <= xupper)]
-            ydata = ydata[(ydata >= ylower) & (ydata <= yupper)]
-
-        print(xdata.shape, ydata.shape)
+        ydata = ydata[:, xdata >= xlower]
+        ydata = ydata[:, xdata <= xupper]
+        xdata = xdata[xdata >= xlower]
+        xdata = xdata[xdata <= xupper]
+                
         for i in range(ydata.shape[0]):
             fit, _ = opt.curve_fit(
                 FitFunc, xdata=xdata, ydata=ydata[i,:]
@@ -546,17 +601,16 @@ class PlotData:
                 'or to "PC1"/"PC2" for principal component 1/2'
             )
         
-        if not (
-            self.rule.ydata in dir(dataobjs[0])
-        ):
-            raise AttributeError(
-                f'Rule "ydata = {self.rule.ydata}" not as attribute in '
-                 'FileData objects. Please set ydata to one of the following '
-                 'values:'
-                f'\n{dir(dataobjs[0])}'
-                '\n, specificly to "c1"/"c2" for coordinate 1/2 in PC-space '
-                'or to "PC1"/"PC2" for principal component 1/2'
-            )
+        for ydata in self.rule.ydata:
+            if not (ydata in dir(dataobjs[0])):
+                raise AttributeError(
+                    f'Rule "ydata = {ydata}" not as attribute in '
+                    'FileData objects. Please set ydata to one of the following '
+                    'values:'
+                    f'\n{dir(dataobjs[0])}'
+                    '\n, specificly to "c1"/"c2" for coordinate 1/2 in PC-space '
+                    'or to "PC1"/"PC2" for principal component 1/2'
+                )
         
         if not (self.rule.sortby == 'N' or self.rule.sortby == 'f'):
             raise ValueError(
@@ -678,27 +732,27 @@ class PlotData:
                 )
                 # increase cyclers if length of rule attributes does not match
                 # length of ydata
-                if len(rule.ls) != len(rule.ydata):
+                if len(lscycler.iterable) != len(rule.ydata):
                     lscycler.Increase()
-                if len(rule.lw) != len(rule.ydata):
+                if len(lwcycler.iterable) != len(rule.ydata):
                     lwcycler.Increase()
-                if len(rule.marker) != len(rule.ydata):
+                if len(markercycler.iterable) != len(rule.ydata):
                     markercycler.Increase()
-                if len(rule.ms) != len(rule.ydata):
+                if len(mscycler.iterable) != len(rule.ydata):
                     mscycler.Increase()
-                if len(rule.color) != len(rule.ydata):
+                if len(colorcycler.iterable) != len(rule.ydata):
                     colorcycler.Increase()
             # increase cyclers if length of rule attributes matches
             # length of ydata      
-            if len(rule.ls) == len(rule.ydata):
+            if len(lscycler.iterable) == len(rule.ydata):
                 lscycler.Increase()
-            if len(rule.lw) == len(rule.ydata):
+            if len(lwcycler.iterable) == len(rule.ydata):
                 lwcycler.Increase()
-            if len(rule.marker) == len(rule.ydata):
+            if len(markercycler.iterable) == len(rule.ydata):
                 markercycler.Increase()
-            if len(rule.ms) == len(rule.ydata):
+            if len(mscycler.iterable) == len(rule.ydata):
                 mscycler.Increase()
-            if len(rule.color) == len(rule.ydata):
+            if len(colorcycler.iterable) == len(rule.ydata):
                 colorcycler.Increase()
 
         self.xdata = xdata
@@ -732,7 +786,7 @@ class PlotData:
                 'Please set system to "windows" or "linux"'
             )        
         figpath = eva_path + seperator + 'plots' + seperator +\
-            rule.plot + '_' + rule.plotdomain + '_' + rule.ydata +\
+            rule.plot + '_' + rule.plotdomain + '_' + str(rule.ydata) +\
             '_vs_'+ rule.xdata + seperator + f'N_{rule.Nrule}'
                 
         fig = plt.figure(figsize=rule.figsize)      # create figure
@@ -768,7 +822,11 @@ class PlotData:
                         f'other because their shapes {xdata[i].shape} and '
                         f'{ydata[i].shape} can not be broadcast together.'
                     )
-            
+                
+            ax.set_prop_cycle(
+                color=color[i], linestyle=ls[i], lw=lw[i],
+                marker=marker[i], ms=ms[i]
+            )
                         
             # plot data as diagram or histogram
             if rule.plot == 'diag':
@@ -795,16 +853,12 @@ class PlotData:
                     # plot data in Kratky plot
                     ydata[i] = ydata[i]*xdata[i]**2
                     ax.loglog(
-                        xdata[i], rule.scalfac*ydata[i], color=color[i],
-                        linestyle=ls[i], lw=lw[i], marker=marker[i], ms=ms[i],
-                        label=labels[i]
+                        xdata[i], rule.scalfac*ydata[i], label=labels[i]
                     )
                 else:
                     # plot data in normal plot
                     ax.plot(
-                        xdata[i], rule.scalfac*ydata[i], color=color[i],
-                        linestyle=ls[i], lw=lw[i], marker=marker[i], ms=ms[i],
-                        label=labels[i]
+                        xdata[i], rule.scalfac*ydata[i], label=labels[i]
                     )
                     ax.set_xscale(rule.xscale)
                     ax.set_yscale(rule.yscale)
@@ -816,7 +870,7 @@ class PlotData:
                 )
                 ax.hist(
                     ydata[i].flatten(), bins=bins, density=True,
-                    color=color[i], label=labels
+                    label=labels
                 )
                 # display mean value and calculate optimal position for text
                 # and line
@@ -848,8 +902,7 @@ class PlotData:
         
 def filter_func(
         name:str, file:h5py.File, NComps:int=config['NComps'],
-        filter_obj:str=config['filter_obj'], eva_path:str=config['eva_path'], 
-        system:str=config['system']
+        filter_obj:str=config['filter_obj']
 ) -> None:
     '''
     Function to filter data groups in .hdf5 'input_file' that contain the
@@ -878,14 +931,6 @@ def filter_func(
     if filter_obj in name:
         # print name in terminal for debugging
         print(f'{name}')
-
-        # define seperator for file handling depending on operating system
-        if system == 'windows':
-            seperator = '\\'                    # define seperator for windows
-                                                # operating system
-        elif system == 'linux':
-            seperator = '/'                     # define seperator for linux
-                                                # operating system
 
         DataObj = FileData.ExtractFileData(file=file, path=name,\
                                            filter_obj=filter_obj,\
@@ -938,3 +983,46 @@ def save_plot(
     fig.savefig(path + seperator + name + fileformat)
     plt.pause(0.1)                                  # pause for 0.1 seconds
     plt.close()                                     # close figure
+
+
+def Blockiness(
+        sequence:list[int], blocktype:int, f:float, normalize:bool
+    ) -> float:
+    '''
+    Function to calculate blockiness of sequence
+    Input:
+    sequence (dtype = list[int])...     list of integers representing sequence
+    blocktype (dtype = int)...          type of block interface,
+                                        1 for blockiness of crosslinker
+                                        sequence 
+                                        2 for reactive blockiness
+                                        3 for crosslinker blockiness
+                                        4 for activeted blockiness
+    normalize (dtype = bool)...         wether blockiness should be normalized
+                                        (True) or nor (False)
+
+    Output:
+    blockiness (dtype = float)...       blockiness of sequence,
+                                        normalized to sequence length
+    '''
+    # create boolean sequence depending on blocktype
+    if blocktype > 1:
+        if blocktype == 3:
+            f = 2*f
+        sequence = sequence == blocktype
+        bmin = np.abs(2*(f - 0.5))
+    else:
+        sequence = np.array([s for s in sequence if s != 3])
+        sequence = sequence == 2
+        bmin = 0
+
+    # apply binding tensor on boolean sequence
+    v = sequence[:-1] == sequence[1:]
+    b = (1 + np.sum(v))/len(sequence)
+
+    if normalize:
+        if (b - 1):
+            # normalize, if b is unequal to 1
+            b = (b - bmin)/(1 - bmin)
+    
+    return b
