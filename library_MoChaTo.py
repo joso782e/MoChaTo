@@ -15,7 +15,6 @@ import h5py
 import numpy as np
 import scipy.optimize as opt
 from sklearn.decomposition import PCA
-from matplotlib import colormaps as cm
 import matplotlib.pyplot as plt
 
 
@@ -30,24 +29,22 @@ with open('.\\data_evaluation\\Scripts\\config.json', 'r') as configf:
 class FileData(PCA):
     '''
     Class to store and update results for comprehensive file evaluation after 
-    individual file evaluation. It inherits from the PCA class of sklearn and contains the following attributes:
+    individual file evaluation. It inherits from the PCA class of sklearn and
+    contains the following attributes after initialization:
+
     - condi:        string describing simulated condition
-    - length:       chainlength in number of spheres
+    - N:            chainlength in number of monomers
+    - position:     monomer positions
     - f:            connector distance
     - q:            values in q-space
     - S:            form factor in q-space
     - clmat:        crosslink matrix
-
+    - sequence:     monomer sequence
     - mS:           mean of form factor in q-space
     - empvar:       empirical variance of form factor in q-space
-    - ll:           loop length
-    - mll:          mean loop length
-    - PCspaceS:     form factor in PC-space
-    - reconS:       reconstructed form factor in q-space
-    - mre:          relative mean reconstruction error
-    - re:           relative reconstruction error in q-space
-    - mrevar:       variance of relative mean reconstruction error
-    - revar:        variance of relative reconstruction error in q-space
+
+    calling further class methods those attributes may be appendixed by
+    individual attributes
     '''   
     # define contructor
     def __init__(
@@ -83,7 +80,7 @@ class FileData(PCA):
         )
         self.condi = condi
         self.N = N
-        self.position = np.arange(1, N+1)   # position of spheres in chain
+        self.positions = np.linspace(1, N, N)    # monomer positions in chain
         self.f = 1/f
         self.q = q
         self.S = S
@@ -177,31 +174,94 @@ class FileData(PCA):
         self.mll = ([np.mean(l) if len(l) > 0 else 0 for l in self.ll])
         # set number of loops
         self.nl = [len(l) for l in self.ll]
-
-    def BalanceProfile(self) -> None:
-        '''
-        
-        '''
-
-        balprofile = np.zeros((self.clmat.shape[0], self.N+1))
-
-        for i in range(balprofile.shape[0]):
-            for j in range(self.clmat.shape[1]):
-                balprofile[i,:] += np.array([
-                    1 if k >= self.clmat[i,j,1] and k <= self.clmat[i,j,2]
-                    else 0 for k in range(balprofile.shape[1])
-                ])
-                balprofile[i,:] /= self.clmat[
-                    np.nonzero(self.clmat[i,:,1])
-                ].shape[1]
-
-        balancepoint = np.sum(
-            balprofile*np.linspace(1,self.N,self.N), axis=1
-        )/np.sum(balprofile, axis=1)
-
-        self.balanceprofile = balprofile
-        self.balancepoint = balancepoint
     
+    def ExtremaInflection(self, xdata:str, ydata:str):
+        '''
+        Function to calculate extrema and points of inflection
+
+        Input:
+        xdata (dtype = str)...          str describing atribute of FileData
+                                        object containing x-values
+        ydata (dtype = str)...          str describing atribute of FileData
+                                        object containing y-values
+                                
+        Output:
+        updates self with new attributes as follows:
+        - self.ext{ydata}...            ndarray containing all extrema j with
+                                        x-coordinate in [i,j] and y-coordinate
+                                        in [i,j+1]
+        - self.inf{ydata}...            ndarray containing all inflections j
+                                        with x-coordinate in [i,j] and
+                                        y-coordinate in [i,j+1]
+        '''
+
+    def BalanceProfile(
+            self, sequence:str, limits:tuple[np.ndarray], name:str
+        ) -> None:
+        '''
+        Function to compute a balance profile, balance and standard deviation
+        for a given sequence
+
+        Input:
+        sequence (dtype = str)...       str describing attribut with seuqence
+                                        data
+        limits (dtype = tuple)...       tuple containing conditions for every
+                                        sequence in "sequence"
+        name (dytep = str)...           for costumization and distiction of new
+                                        attributes
+        
+        Output:
+        updates self with new attributes as follows:
+        - self.{name}profiles...        balance profile over sequences
+        - self.{name}balances...        normalized and centered balances of
+                                        profiles
+        - self.{name}devbalances...     normalized deviation of balances
+        '''
+        sequence = getattr(self, sequence)
+
+        if len(limits) == 1:
+            l1 = limits[0]
+            l2 = limits[0]
+        elif len(limits) == 2:
+            l1 = limits[0]
+            l2 = limits[1]
+        else:
+            raise ValueError(
+                'More then two conditions are not supported. Please set '
+                '"limits" to a tuple containing two lists.'
+            )
+        
+        profiles = []
+        balances = []
+        devbalances = []
+
+        if sequence.ndim == 1:
+            m = len(l1)
+            n = sequence.shape[0]
+            sequence = np.full(shape=(m,n), fill_value=sequence, dtype=float)
+        elif sequence.ndim != 2:
+            raise ValueError(
+                '"sequence" does not have a supported shape. Please check if '
+                'its a 1D or 2D array.'
+            )
+
+        for i in range(len(l1)):
+            p, bp, devb = BalanceProfile(
+                sequence=sequence[i,:], limits=(l1[i],l2[i])
+            )
+
+            profiles.append(p)
+            balances.append(bp)
+            devbalances.append(devb)
+        
+        profiles = np.stack(profiles, axis=0)
+        balances = np.stack(balances, axis=0)
+        devbalances = np.stack(devbalances, axis=0)
+
+        setattr(self, f'{name}profiles', profiles)
+        setattr(self, f'{name}balances', balances)
+        setattr(self, f'{name}devbalances', devbalances)
+
     def Blockiness(self, blocktype:int, normalize:bool) -> None:
         '''
         Function to calculate blockiness of SCNP from sequences
@@ -213,6 +273,8 @@ class FileData(PCA):
                                         2 for reactive blockiness
                                         3 for crosslinker blockiness
                                         4 for activeted blockiness
+        normalize (dtype = bool)...     wether blockiness should be normalized
+                                        (True) or nor (False)
         
         Output:
         updates self with new attributes as follows:
@@ -247,35 +309,40 @@ class FileData(PCA):
 
         Output:
         updates self with new attributes as follows:
-        - self.bin{xdata}...
+        - self.binmean{xdata}...
+        - self.binmean{ydata}...
+        - self.binerr{ydata}...
         '''
-        xdata = getattr(self, xdata)
-        ydata = getattr(self, ydata)
+        xvalues = getattr(self, xdata)
+        yvalues = getattr(self, ydata)
 
-        xmin = xlower if xlower else np.min(xdata)
-        xmax = xupper if xupper else np.max(xdata)
+        xmin = xlower if xlower else np.min(xvalues)
+        xmax = xupper if xupper else np.max(xvalues)
 
         if isinstance(bins, int):
-            xdata = np.linspace(xmin, xmax, bins+1)
-        else:
-            xdata = bins
+            bins = np.linspace(xmin, xmax, bins+1)
+
+        setattr(self, f'binmean{xdata}', (bins[:-1] + bins[1:])/2)
         
-        setattr(self, f'binmean{xdata}', (xdata[1:] + xdata[:-1])/2)
+        y = np.zeros_like(bins[1:])
+        yerr = np.zeros_like(bins[1:])
 
-        y = np.zeros_like(xdata[1:])
-        yerr = np.zeros_like(xdata[1:])
-
-        for i in range(len(xdata[1:])):
-            y[i] = np.mean(ydata[np.nonzero(xdata >= xmin and xdata <= xmax)])
-            yerr[i] = np.sqrt(
-                np.var(ydata[np.nonzero(xdata >= xmin and xdata <= xmax)])
-            )
+        for i in range(len(bins[1:])):
+            binned = yvalues[xvalues >= bins[i]]
+            buffer = xvalues[xvalues >= bins[i]]
+            binned = binned[buffer <= bins[i+1]]
+            if len(binned):
+                y[i] = np.mean(binned)
+                yerr[i] = np.sqrt(np.var(binned))
+            else:
+                y[i] = 0
+                yerr[i] = 0
         
         setattr(self, f'binmean{ydata}', y)
         setattr(self, f'binerr{ydata}', yerr)
 
     def PerfPCA(
-            self, setname:str, args:list[str], operant:str,
+            self, setname:str, args:list[str], operant:str, axis:int=None,
             transpose:bool=False
         ) -> None:
         '''
@@ -288,8 +355,10 @@ class FileData(PCA):
         - args (dtype = list[str])...   list of attributes to be used to
                                         manipulate data for PCA
         - operant (dtype = str)...      operant to be used to manipulate data
-                                        before PCA, can be '+', '-', '*', or
-                                        'None' for no manipulation
+                                        before PCA, can be '+', '-', '*',
+                                        'concatenate' or 'None' for no manipulation
+        - axis (dtype = int)...         specifies on which axis to concatenate
+                                        if operant is 'concatenate'
         - transpose (dtype = bool)...   if True, data is transposed before
                                         PCA, default is False
 
@@ -299,6 +368,7 @@ class FileData(PCA):
         PC-space
         - self.{setname}PC{i} for i = 1, ..., n_components Principal components
         '''
+        concataxis = None
         if operant == '+':
             operant = np.add
             dataset = 0
@@ -308,13 +378,20 @@ class FileData(PCA):
         elif operant == '*':
             operant = np.multiply
             dataset = 1
+        elif operant == 'concatenate':
+            operant = np.concat
+            concataxis = axis
         
         if operant not in [np.add, np.subtract, np.multiply]:
             dataset = getattr(self, args[0])
         else:
             for arg in args:
                 argset = getattr(self, arg)
-                dataset = operant(dataset, argset)
+                if concataxis:
+                    dataset = (dataset, argset)
+                    dataset = operant(dataset, axis=concataxis)
+                else:
+                    dataset = operant(dataset, argset)
                 setattr(self, setname, dataset)
 
         trafo = self.fit_transform(
@@ -445,8 +522,9 @@ class FileData(PCA):
         ydata = getattr(self, ydata)
 
         ydata = ydata[:, xdata >= xlower]
-        ydata = ydata[:, xdata <= xupper]
         xdata = xdata[xdata >= xlower]
+
+        ydata = ydata[:, xdata <= xupper]
         xdata = xdata[xdata <= xupper]
                 
         for i in range(ydata.shape[0]):
@@ -458,6 +536,13 @@ class FileData(PCA):
                 for j in range(len(fit)):
                     
                     setattr(self, f'{fitname}{j}', [fit[j]])
+            elif i == ydata.shape[0] - 1:
+                for j in range(len(fit)):
+                    f = getattr(self, f'{fitname}{j}')
+
+                    f.append(fit[j])
+
+                    setattr(self, f'{fitname}{j}', np.array(f))
             else:
                 for j in range(len(fit)):
                     f = getattr(self, f'{fitname}{j}')
@@ -565,6 +650,13 @@ class PlotData:
             dataobjs:list[FileData]
     ):
         self.rule = PlotRule(plotaspects=plotaspects)
+        if isinstance(self.rule.ydata, str):
+            self.rule.ydata = [self.rule.ydata]
+        if (
+            isinstance(self.rule.yerr, str)
+            and self.rule.plot == 'errorbar'
+        ):
+                self.rule.yerr = [self.rule.yerr]
 
         if (
             not set(self.rule.Nrule).issubset([obj.N for obj in dataobjs]) or
@@ -605,11 +697,11 @@ class PlotData:
             if not (ydata in dir(dataobjs[0])):
                 raise AttributeError(
                     f'Rule "ydata = {ydata}" not as attribute in '
-                    'FileData objects. Please set ydata to one of the following '
-                    'values:'
+                    'FileData objects. Please set ydata to one of the '
+                    'following values:'
                     f'\n{dir(dataobjs[0])}'
-                    '\n, specificly to "c1"/"c2" for coordinate 1/2 in PC-space '
-                    'or to "PC1"/"PC2" for principal component 1/2'
+                    '\n, specificly to "c1"/"c2" for coordinate 1/2 in '
+                    'PC-space or to "PC1"/"PC2" for principal component 1/2'
                 )
         
         if not (self.rule.sortby == 'N' or self.rule.sortby == 'f'):
@@ -647,6 +739,10 @@ class PlotData:
 
         xdata = []      # list to store xdata
         ydata = []      # list to store ydata
+        # if errorbar plot, create lists to store x and y errors
+        if rule.plot == 'errorbar':
+            xerr = []
+            yerr = []
         labels = []     # list to store labels for data sets
         ls = []         # list to store line styles
         lw = []         # list to store line widths
@@ -695,6 +791,56 @@ class PlotData:
                         if getattr(obj, rule.sortby) == j
                     ], axis=0)
                 )
+                # if errorbar plot, get data for errors
+                if rule.plot == 'errorbar':
+                    # if xerr is given, get xerr for current rule and append to
+                    # xerr list
+                    if rule.xerr in dir(self.data[0]):
+                        xerr.append(
+                            np.stack([
+                                getattr(obj, rule.xerr[i]) for obj in self.data
+                                if getattr(obj, rule.sortby) == j
+                            ], axis=0)
+                        )
+                    elif (
+                        isinstance(rule.xerr[i], (int, float))
+                        or str(rule.xerr[i]).isnumeric()
+                    ):
+                        xerr.append(np.full_like(
+                            xdata[i], float(rule.xerr[i]), dtype=float
+                        ))
+                    else:
+                        print(ValueError(
+                           f'Warning! Input for xerr empty or not supported. '
+                            'xerr will be set to 0'
+                        ))
+                        xerr.append(
+                            np.full_like(xdata[i], 0.0, dtype=float)
+                        )
+                    # if yerr is given, get yerr for current rule and append to
+                    # yerr list
+                    if rule.yerr in dir(self.data[0]):
+                        yerr.append(
+                            np.stack([
+                                getattr(obj, rule.yerr[i]) for obj in self.data
+                                if getattr(obj, rule.sortby) == j
+                            ], axis=0)
+                        )
+                    elif (
+                        isinstance(rule.yerr[i], (int, float))
+                        or str(rule.yerr[i]).isnumeric()
+                    ):
+                        yerr.append(np.full_like(
+                            ydata[i], float(rule.yerr[i]),dtype=float
+                        ))
+                    else:
+                        print(ValueError(
+                           f'Warning! Input for xerr empty or not supported. '
+                            'yerr will be set to 0'
+                        ))
+                        yerr.append(
+                            np.full_like(ydata[i], 0.0, dtype=float)
+                        )
                 # create label for current rule and append to labels list
                 if len(rule.ydata) > 1:
                     lstr = f'${rule.label[i]}$ at ${rule.sortby}={round(j,2)}$'
@@ -757,6 +903,9 @@ class PlotData:
 
         self.xdata = xdata
         self.ydata = ydata
+        if rule.plot == 'errorbar':
+            self.xerr = xerr
+            self.yerr = yerr
         self.labels = labels
         self.ls = ls
         self.lw = lw
@@ -800,6 +949,9 @@ class PlotData:
 
         xdata = self.xdata
         ydata = self.ydata
+        if rule.plot == 'errorbar':
+            xerr = self.xerr
+            yerr = self.yerr
         labels = self.labels
         ls = self.ls
         lw = self.lw
@@ -812,10 +964,14 @@ class PlotData:
             # asume more data points then samples
             if xdata[i].shape[0] < xdata[i].shape[1]:
                 xdata[i] = xdata[i].T
+                if rule.plot == 'errorbar':
+                    xerr[i] = xerr[i].T
             # check if one axis lenght of ydata[i] matches length of axis 0 in
             # xdata[i], if not raise ValueError
             if xdata[i].shape[0] != ydata[i].shape[0]:
                 ydata[i] = ydata[i].T
+                if rule.plot == 'errorbar':
+                    yerr[i] = yerr[i].T
                 if xdata[i].shape[0] != ydata[i].shape[0]:
                     raise ValueError(
                         f'Data set {i+1} can not be plotted against each '
@@ -862,7 +1018,11 @@ class PlotData:
                     )
                     ax.set_xscale(rule.xscale)
                     ax.set_yscale(rule.yscale)
-
+            elif rule.plot == 'errorbar':
+                ax.errorbar(
+                    np.squeeze(xdata[i]), np.squeeze(ydata[i]),
+                    np.squeeze(yerr[i]), np.squeeze(xerr[i]), label=labels[i]
+                )
             elif rule.plot == 'hist':
                 # create bins and plot data in histogram
                 bins = np.linspace(
@@ -885,7 +1045,7 @@ class PlotData:
                     f'mean value:\n{round(np.mean(ydata[i]),4)}',
                     horizontalalignment='center',
                     verticalalignment='bottom'
-                )
+                )                
             else:
                 raise ValueError(
                     f'Plot type "{rule.plot}" not supported. '
@@ -990,6 +1150,7 @@ def Blockiness(
     ) -> float:
     '''
     Function to calculate blockiness of sequence
+
     Input:
     sequence (dtype = list[int])...     list of integers representing sequence
     blocktype (dtype = int)...          type of block interface,
@@ -1026,3 +1187,91 @@ def Blockiness(
             b = (b - bmin)/(1 - bmin)
     
     return b
+
+
+def BalanceProfile(
+        sequence:np.ndarray, limits:tuple[np.ndarray]
+    ) -> np.ndarray:
+    '''
+    Function to compute the balance profile over a sequence for a given
+    criterion
+
+    Input:
+    sequence (dtype = np.ndarray)...    sequence over which to compute the
+                                        balance profile
+
+    Output:
+    '''
+    l = limits[0]
+    u = limits[1]
+
+    lower = np.array([
+        l[i] if l[i] < u[i] else u[i] for i in range(len(l))
+    ])
+    upper = np.array([
+        u[i] if u[i] > l[i] else l[i] for i in range(len(u))
+    ])
+    
+    if lower.ndim != upper.ndim != 1:
+        raise ValueError(
+           f'Shapes {lower.shape} and {upper.shape} not supported for lower '
+            'and upper conditions. Set "limits" to a tuple with 2 1D arrays.'
+        )
+    
+    m = len(lower)
+    n = len(sequence)    
+    
+    profile = np.full(shape=(m,n), fill_value=sequence, dtype=float)
+    lower = np.stack([lower for _ in range(n)], axis=1)
+    upper = np.stack([upper for _ in range(n)], axis=1)
+
+    # compute balance profile
+    profile = (profile >= lower) == (profile <= upper)
+    profile = np.sum(profile, axis=0)
+
+    # calculate balance point of profile and standard deviation
+    if np.sum(profile) == 0:
+        b = 1.5
+        devb = 0
+    else:
+        b = np.sum(np.multiply(profile, sequence))/np.sum(profile)
+        devb = np.sqrt(
+            np.sum((np.multiply(profile, sequence) - b)**2)/np.sum(profile)**2
+        )
+
+        b = np.abs(2*b/n - 1)           # normalized and centered balance on
+                                        # sequence
+        devb = np.abs(2*devb/n - 1)     # normalized and centered deviation
+                                        # sequence
+    
+    return np.squeeze(profile), float(b), float(devb)
+
+
+def Extrema(xdata:np.ndarray, ydata:np.ndarray) -> np.ndarray:
+    '''
+    Function to compute the extrema of a series
+
+    Input:
+    xdata (dtype = np.ndarray)...   array with x-values
+    ydata (dtype = np.ndarray)...   array with y-values
+
+    Output:
+    extrema...                      ndarray containing all extrema i with 
+                                    x-coordinate in [i] and y-coordinate
+                                    in [i+1]
+    '''
+
+
+def Inflection(xdata:np.ndarray, ydata:np.ndarray) -> np.ndarray:
+    '''
+    Function to compute the inflection points of a series
+    
+    Input:
+    xdata (dtype = np.ndarray)...   array with x-values
+    ydata (dtype = np.ndarray)...   array with y-values
+
+    Output:
+    inflection...                   ndarray containing all inflection points i
+                                    with x-coordinate in [i] and y-coordinate
+                                    in [i+1]
+    '''

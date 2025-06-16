@@ -103,72 +103,82 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
             FitFunc=FitGyraRad, xdata='q', ydata='S', fitname='Rg',
             xlim=(None, 2e-2)
         )
+        # compute compactness of polymers
+        obj.compactness = obj.Rg1/obj.N
 
         # perform PCA on form factor
         obj.PerfPCA(setname='S', operant='None', args=['S'])
         obj.PerfRecon(setname='S')
-        
-        # perform blockiness calculation
+
+        # compute balance profile of loops over monomer positions
+        l1 = [obj.clmat[i,:,1] for i in range(obj.clmat.shape[0])]
+        l2 = [obj.clmat[i,:,2] for i in range(obj.clmat.shape[0])]
+        obj.BalanceProfile(sequence='positions', limits=(l1,l2), name='loop')
+
+        # compute blockiness of polymers
         obj.Blockiness(blocktype=1, normalize=True)
-        obj.Blockiness(blocktype=4, normalize=True)
-        obj.Blockiness(blocktype=2, normalize=True)
-        obj.Blockiness(blocktype=3, normalize=True)
+        # bin blockiness over c2
+        obj.BinData(xdata='Sc2', ydata='b1', bins=20)
 
     
     plotaspects = {}
 
-    # Nrule:        -list of floats or 'all', obj.N matching rule are plotted
-    # frule:        -list of floats or 'all', obj.f matching rule are plotted 
-    # binnum:       -int setting number of bins 
-    # title:        -str setting plot title
-    # xlabel:       -str setting x-axis label
-    # ylabel:       -str setting y-axis label
-    # xdata:        -str referencing an obj attribute for use as xdata
-    # ydata:        -str referencing an obj attribute for use as ydata
-    # xlim:         -list or tuple setting x-axis view limits;
-    #                e.g. [1e-2, None]
-    # ylim:         -list or tuple setting x-axis view limits,
-    #                e.g. [1e-4, None]
-    # xscale:       -str setting scaling of x-axis
-    # yscale:       -str setting scaling of y-axis
-    # scalfac:      -list or array scaling y data
-    # ls:           -list of str setting linestyles;
-    #                length must match with lw, color, marker and ms
-    # lw:           -list of floats setting linewidths;
-    #                length must match with ls, color, marker and ms
-    # marker:       -list of str setting marker types;
-    #                length must match with ls, lw, color and ms
-    # ms:           -list of floats setting marker sizes;
-    #                length must match with ls, lw, color and marker
-    # color:        -list of colors;
-    #                length must match with ls, lw, marker and ms
-    # plotdomain:   -decide how to plot data as graph; only Kratky implemented
-    # plot:         -decide wether to plot as graph/scatter or as histogram
-    # sortby:       -option to sort data sets by N or f values
-    # legend:       -wether to display legend or not
-    # legend_loc:   -str disribing the legends location in the plot
-    # label:        -str for what to use in labeling data sets: either N or f
+    # Nrule:        - list of floats or 'all', obj.N matching rule are plotted
+    # frule:        - list of floats or 'all', obj.f matching rule are plotted 
+    # binnum:       - int setting number of bins 
+    # title:        - str setting plot title
+    # xlabel:       - str setting x-axis label
+    # ylabel:       - str setting y-axis label
+    # xdata:        - str referencing an obj attribute for use as xdata
+    # ydata:        - str referencing an obj attribute for use as ydata
+    # xlim:         - list or tuple setting x-axis view limits;
+    #                 e.g. [1e-2, None]
+    # ylim:         - list or tuple setting x-axis view limits,
+    #                 e.g. [1e-4, None]
+    # xscale:       - str setting scaling of x-axis
+    # yscale:       - str setting scaling of y-axis
+    # scalfac:      - list or array scaling y data
+    # ls:           - list of str setting linestyles;
+    #                 length must match with lw, color, marker and ms
+    # lw:           - list of floats setting linewidths;
+    #                 length must match with ls, color, marker and ms
+    # marker:       - list of str setting marker types;
+    #                 length must match with ls, lw, color and ms
+    # ms:           - list of floats setting marker sizes;
+    #                 length must match with ls, lw, color and marker
+    # color:        - list of colors;
+    #                 length must match with ls, lw, marker and ms
+    # plotdomain:   - decide how to plot data as graph; only Kratky implemented
+    # plot:         - decide wether to plot as graph/scatter, histogram or
+    #                 errorbar
+    # sortby:       - option to sort data sets by N or f values
+    # legend:       - wether to display legend or not
+    # legend_loc:   - str disribing the legends location in the plot
+    # label:        - str for what to use in labeling data sets: either N or f
     
     plotaspects['Nrule'] = [100]
-    plotaspects['frule'] = [1/4, 1/8, 1/12]
-    plotaspects['title']= 'Normalized crosslinker blockiness vs. PC2'
-    plotaspects['xlabel'] = r'$c_2$'
-    plotaspects['ylabel'] = r'$\beta_1$'
-    plotaspects['xdata'] = 'Sc2'
-    plotaspects['ydata'] = ['b1']
+    plotaspects['frule'] = [1/4]
+    plotaspects['title']= 'PC2 vs. PC1'
+    plotaspects['xlabel'] = r'$c_1$'
+    plotaspects['ylabel'] = r'$c_2$'
+    plotaspects['xdata'] = 'Sc1'
+    plotaspects['ydata'] = 'Sc2'
+    plotaspects['xerr'] = '0'
+    plotaspects['yerr'] = 'binerrb1'
     plotaspects['xlim'] = [None, None]
     plotaspects['ylim'] = [None, None]
     plotaspects['xscale'] = 'linear'
     plotaspects['yscale'] = 'linear'
     plotaspects['scalfac'] = 1.0
     plotaspects['ls'] = 'None'
-    plotaspects['lw'] = 1.0
+    plotaspects['lw'] = 1.5
     plotaspects['marker'] = 'o'
     plotaspects['ms'] = 3.0
-    plotaspects['color'] = ['dodgerblue', 'limegreen', 'orangered']
+    plotaspects['color'] = ['dodgerblue']
     plotaspects['plotdomain'] = 'PCspace'
+    plotaspects['plot'] = 'diag'
     plotaspects['sortby'] = 'f'
-    plotaspects['legend'] = True
+    plotaspects['legend'] = False
     plotaspects['legend_loc'] = 'upper left'
     plotaspects['label'] = ['f']
 
