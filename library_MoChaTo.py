@@ -174,7 +174,52 @@ class FileData(PCA):
         self.mll = ([np.mean(l) if len(l) > 0 else 0 for l in self.ll])
         # set number of loops
         self.nl = [len(l) for l in self.ll]
-    
+
+    def ManipulateData(
+            self,  args:list[str], setname:str, operant:str, axis:int=None
+        ):
+        '''
+        Function to manipulate excisting datasets
+
+        Input
+        - args (dtype = list[str])...   list of attributes to be used to
+                                        manipulate data for PCA
+        - setname (dtype = str)...      category attribute name for results,
+                                        see description of output
+        - operant (dtype = str)...      operant to be used to manipulate data
+                                        before PCA, can be '+', '-', '*',
+                                        'concatenate' or 'None' for no
+                                        manipulation
+        - axis (dtype = int)...         if operant is 'concatenate'
+                                        specifies on which axis to concatenate
+                                        
+        '''
+        concataxis = None
+        if operant == '+':
+            operant = np.add
+            dataset = 0
+        elif operant == '-':
+            operant = np.subtract
+            dataset = 0
+        elif operant == '*':
+            operant = np.multiply
+            dataset = 1
+        elif operant == 'concatenate':
+            operant = np.concat
+            concataxis = axis
+        
+        if operant not in [np.add, np.subtract, np.multiply]:
+            dataset = getattr(self, args[0])
+        else:
+            for arg in args:
+                argset = getattr(self, arg)
+                if concataxis:
+                    dataset = (dataset, argset)
+                    dataset = operant(dataset, axis=concataxis)
+                else:
+                    dataset = operant(dataset, argset)
+            setattr(self, setname, dataset)
+
     def ExtremaInflection(self, xdata:str, ydata:str):
         '''
         Function to calculate extrema and points of inflection
@@ -190,10 +235,30 @@ class FileData(PCA):
         - self.ext{ydata}...            ndarray containing all extrema j with
                                         x-coordinate in [i,j] and y-coordinate
                                         in [i,j+1]
+        - self.nmax{ydata}...           number of maxima in ydata
+        - self.nmin{ydata}...           number of minima in ydata
         - self.inf{ydata}...            ndarray containing all inflections j
                                         with x-coordinate in [i,j] and
                                         y-coordinate in [i,j+1]
         '''
+        if not hasattr(self, xdata):
+            raise AttributeError(
+               f'FileData object  does not have {xdata} as attribute. Please '
+                'give a valid attribute name for "xdata".'
+            )
+        if not hasattr(self, ydata):
+            raise AttributeError(
+               f'FileData object  does not have {ydata} as attribute. Please '
+                'give a valid attribute name for "ydata".'
+            )
+        xvalues = getattr(self, xdata)
+        yvalues = getattr(self, ydata)
+
+        extrema = np.apply_along_axis(
+            lambda y: Extrema(xvalues, y), axis=1, arr=yvalues
+        )
+
+        print(extrema)
 
     def BalanceProfile(
             self, sequence:str, limits:tuple[np.ndarray], name:str
@@ -342,8 +407,7 @@ class FileData(PCA):
         setattr(self, f'binerr{ydata}', yerr)
 
     def PerfPCA(
-            self, setname:str, args:list[str], operant:str, axis:int=None,
-            transpose:bool=False
+            self, setname:str, transpose:bool=False
         ) -> None:
         '''
         Function to peform PCA () on data and store results in self, PCA is
@@ -351,14 +415,8 @@ class FileData(PCA):
         axis 1
 
         Input:
-        - setname (dtype = str)...      category name of results
-        - args (dtype = list[str])...   list of attributes to be used to
-                                        manipulate data for PCA
-        - operant (dtype = str)...      operant to be used to manipulate data
-                                        before PCA, can be '+', '-', '*',
-                                        'concatenate' or 'None' for no manipulation
-        - axis (dtype = int)...         specifies on which axis to concatenate
-                                        if operant is 'concatenate'
+        - setname (dtype = str)...      attribute name of dataset to perform
+                                        PCA on
         - transpose (dtype = bool)...   if True, data is transposed before
                                         PCA, default is False
 
@@ -368,32 +426,7 @@ class FileData(PCA):
         PC-space
         - self.{setname}PC{i} for i = 1, ..., n_components Principal components
         '''
-        concataxis = None
-        if operant == '+':
-            operant = np.add
-            dataset = 0
-        elif operant == '-':
-            operant = np.subtract
-            dataset = 0
-        elif operant == '*':
-            operant = np.multiply
-            dataset = 1
-        elif operant == 'concatenate':
-            operant = np.concat
-            concataxis = axis
-        
-        if operant not in [np.add, np.subtract, np.multiply]:
-            dataset = getattr(self, args[0])
-        else:
-            for arg in args:
-                argset = getattr(self, arg)
-                if concataxis:
-                    dataset = (dataset, argset)
-                    dataset = operant(dataset, axis=concataxis)
-                else:
-                    dataset = operant(dataset, argset)
-                setattr(self, setname, dataset)
-
+        dataset = getattr(self, setname)
         trafo = self.fit_transform(
             dataset.T if transpose else dataset
         )
@@ -407,8 +440,8 @@ class FileData(PCA):
         PCA
 
         Input:
-        setname (dtype = str)...        category name of PCA set to perform
-                                        reconstruction on
+        setname (dtype = str)...        category attribute name of dataset to
+                                        perform reconstruction from PCA
 
         Output:
         updates self with new attributes as follows:
@@ -913,7 +946,6 @@ class PlotData:
         self.ms = ms
         self.color = color
 
-
     def CreatePlot(
             self, eva_path:str=config['eva_path'], system:str=config['system']
     ) -> None:
@@ -1063,7 +1095,7 @@ class PlotData:
 def filter_func(
         name:str, file:h5py.File, NComps:int=config['NComps'],
         filter_obj:str=config['filter_obj']
-) -> None:
+) -> FileData:
     '''
     Function to filter data groups in .hdf5 'input_file' that contain the
     string 'filter_obj' and perform data collection, evaluation and plotting
@@ -1075,14 +1107,9 @@ def filter_func(
     NComps (dtype = int)...         number of principal components to perform 
                                     PCA with
     filter_obj (dtype = str)...     name of one data group to filter simulated
-                                    conditions in .hdf5 'input_file'
-    eva_path (dtype = str)...       path to save evaluation results and plots
-    system (dtype = str)...         name of operating system,
-                                    either 'windows' or 'linux'
-    TestRun (dtype = bool)...       flag wether to plot data for condition
-                                    evaluation or not
+                                    conditions in .hdf5 'input_file'    
 
-    output variables:
+    Output:
     DataObj or None
     ---------------------------------------------------------------------------
     '''
@@ -1247,7 +1274,7 @@ def BalanceProfile(
     return np.squeeze(profile), float(b), float(devb)
 
 
-def Extrema(xdata:np.ndarray, ydata:np.ndarray) -> np.ndarray:
+def Extrema(xdata:np.ndarray, ydata:np.ndarray) -> tuple[np.ndarray, int, int]:
     '''
     Function to compute the extrema of a series
 
@@ -1259,10 +1286,61 @@ def Extrema(xdata:np.ndarray, ydata:np.ndarray) -> np.ndarray:
     extrema...                      ndarray containing all extrema i with 
                                     x-coordinate in [i] and y-coordinate
                                     in [i+1]
+    nmax...                         number of maxima
+    nmin...                         number of minima
     '''
+    maxind = (ydata[1:-1] >= ydata[:-2]) == (ydata[1:-1] >= ydata[2:])
+    minind = (ydata[1:-1] <= ydata[:-2]) == (ydata[1:-1] <= ydata[2:])
+
+    xdata = xdata[1:-1]
+    xmaxdouble = xdata[maxind]
+    xmindouble = xdata[minind]
+    
+    ydata = ydata[1:-1]
+    ymax, maxcount = np.unique_counts(ydata[maxind])
+    ymin, mincount = np.unique_counts(ydata[minind])
+
+    maxcount = np.cumsum(maxcount)
+    mincount = np.cumsum(mincount)
+
+    xmax = np.zeros_like(ymax)
+    xmin = np.zeros_like(ymin)
+
+    for i in range(len(maxcount)):
+        if i:
+            lmax = maxcount[i-1]
+            lmin = mincount[i-1]
+        else:
+            lmax = 0
+            lmin = 0
+        if i+1 == len(xmaxdouble):
+            umax = -1
+            umin = -1
+        else:
+            umax = maxcount[i]
+            umin = mincount[i]
+        
+        if np.sum(xmaxdouble[lmax:umax]):
+            xmax[i] = np.mean(xmaxdouble[lmax:umax])
+        else:
+            xmax[i] = 0
+        if np.sum(xmindouble[lmin:umin]):
+            xmin[i] = np.mean(xmindouble[lmin:umin])
+        else:
+            xmin[i] = 0
+
+    xextrem = np.concatenate([xmax, xmin])
+
+    yextrem = np.concatenate([ymax, ymin])
+
+    extrema = np.array(zip(xextrem, yextrem))
+
+    return extrema, len(xmax), len(xmin)
 
 
-def Inflection(xdata:np.ndarray, ydata:np.ndarray) -> np.ndarray:
+def Inflection(
+    xdata:np.ndarray, ydata:np.ndarray
+) -> tuple[np.ndarray, int, int]:
     '''
     Function to compute the inflection points of a series
     
@@ -1275,3 +1353,6 @@ def Inflection(xdata:np.ndarray, ydata:np.ndarray) -> np.ndarray:
                                     with x-coordinate in [i] and y-coordinate
                                     in [i+1]
     '''
+    ydata = np.diff(ydata)
+
+    return Extrema(xdata[:-1], ydata)

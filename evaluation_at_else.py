@@ -106,20 +106,11 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         # compute compactness of polymers
         obj.compactness = obj.Rg1/obj.N
 
-        # perform PCA on form factor
-        obj.PerfPCA(setname='S', operant='None', args=['S'])
-        obj.PerfRecon(setname='S')
+        # create calculate qqS
+        obj.ManipulateData(args=['q', 'q', 'S'], setname='qqS', operant='*')
 
-        # compute balance profile of loops over monomer positions
-        l1 = [obj.clmat[i,:,1] for i in range(obj.clmat.shape[0])]
-        l2 = [obj.clmat[i,:,2] for i in range(obj.clmat.shape[0])]
-        obj.BalanceProfile(sequence='positions', limits=(l1,l2), name='loop')
-
-        # compute blockiness of polymers
-        obj.Blockiness(blocktype=1, normalize=True)
-        # bin blockiness over c2
-        obj.BinData(xdata='Sc2', ydata='b1', bins=20)
-
+        # compute extrema and inflection points
+        obj.ExtremaInflection(xdata='q', ydata='qqS')
     
     plotaspects = {}
 
@@ -182,8 +173,9 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['legend_loc'] = 'upper left'
     plotaspects['label'] = ['f']
 
-    gyraplot = lib.PlotData(plotaspects, DataObjs)
-    gyraplot.GetData()          # get data from FileData objects
-    gyraplot.CreatePlot()       # plot data as graph
+    #evaplot = lib.PlotData(plotaspects, DataObjs)
+    #evaplot.GetData()
+    #evaplot.CreatePlot()
+    
 
 print('Evaluation finished')
