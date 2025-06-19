@@ -34,7 +34,7 @@ search_crit = root_dir + '\\**\\*.hdf5'.replace('\\\\', seperator)
 
 filter_obj = 'swell_sqiso_key'
 eva_path = root_dir +\
-    '\\data_evaluation\\script_evaluation'.replace('\\\\', seperator)
+    '\\data_evaluation\\script_evaluation\\PCA_on_qqS'.replace('\\\\', seperator)
 
 
 config = {
@@ -109,9 +109,9 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         # create calculate qqS
         obj.ManipulateData(args=['q', 'q', 'S'], setname='qqS', operant='*')
 
-        # compute extrema and inflection points
-        obj.ExtremaInflection(xdata='q', ydata='qqS')
-    
+        # perform PCA on 'qqS'
+        obj.PerfPCA(setname='qqS') 
+
     plotaspects = {}
 
     # Nrule:        - list of floats or 'all', obj.N matching rule are plotted
@@ -128,7 +128,7 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     #                 e.g. [1e-4, None]
     # xscale:       - str setting scaling of x-axis
     # yscale:       - str setting scaling of y-axis
-    # scalfac:      - list or array scaling y data
+    # scalfac:      - list or array scaling y data befor applying Kratky
     # ls:           - list of str setting linestyles;
     #                 length must match with lw, color, marker and ms
     # lw:           - list of floats setting linewidths;
@@ -149,33 +149,51 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     
     plotaspects['Nrule'] = [100]
     plotaspects['frule'] = [1/4]
-    plotaspects['title']= 'PC2 vs. PC1'
-    plotaspects['xlabel'] = r'$c_1$'
-    plotaspects['ylabel'] = r'$c_2$'
-    plotaspects['xdata'] = 'Sc1'
-    plotaspects['ydata'] = 'Sc2'
+    plotaspects['title']= 'PCs vs. q'
+    plotaspects['xlabel'] = r'$q$'
+    plotaspects['ylabel'] = r'$PC_i$'
+    plotaspects['xdata'] = 'q'
+    plotaspects['ydata'] = ['qqSPC1', 'qqSPC2']
     plotaspects['xerr'] = '0'
     plotaspects['yerr'] = 'binerrb1'
-    plotaspects['xlim'] = [None, None]
+    plotaspects['xlim'] = [1e-2, None]
     plotaspects['ylim'] = [None, None]
-    plotaspects['xscale'] = 'linear'
-    plotaspects['yscale'] = 'linear'
-    plotaspects['scalfac'] = 1.0
-    plotaspects['ls'] = 'None'
+    plotaspects['xscale'] = 'log'
+    plotaspects['yscale'] = 'log'
+    plotaspects['scalfac'] = [
+        np.mean(obj.qqSc1) for obj in DataObjs
+        if set(plotaspects['Nrule']).issubset([obj.N])
+        and set(plotaspects['frule']).issubset([obj.f])
+    ].append([
+        np.mean(obj.qqSc2) for obj in DataObjs
+        if set(plotaspects['Nrule']).issubset([obj.N])
+        and set(plotaspects['frule']).issubset([obj.f])
+    ])
+    print([
+        np.mean(obj.qqSc1) for obj in DataObjs
+        if set(plotaspects['Nrule']).issubset([obj.N])
+        and set(plotaspects['frule']).issubset([obj.f])
+    ].append([
+        np.mean(obj.qqSc2) for obj in DataObjs
+        if set(plotaspects['Nrule']).issubset([obj.N])
+        and set(plotaspects['frule']).issubset([obj.f])
+    ]))
+    print(plotaspects['scalfac'])
+    plotaspects['ls'] = '-'
     plotaspects['lw'] = 1.5
     plotaspects['marker'] = 'o'
-    plotaspects['ms'] = 3.0
-    plotaspects['color'] = ['dodgerblue']
+    plotaspects['ms'] = 0.0
+    plotaspects['color'] = ['cyan', 'lime']
     plotaspects['plotdomain'] = 'PCspace'
     plotaspects['plot'] = 'diag'
     plotaspects['sortby'] = 'f'
-    plotaspects['legend'] = False
-    plotaspects['legend_loc'] = 'upper left'
-    plotaspects['label'] = ['f']
+    plotaspects['legend'] = True
+    plotaspects['legend_loc'] = 'upper right'
+    plotaspects['label'] = ['Component 1', 'Component 2']
 
-    #evaplot = lib.PlotData(plotaspects, DataObjs)
-    #evaplot.GetData()
-    #evaplot.CreatePlot()
+    evaplot = lib.PlotData(plotaspects, DataObjs)
+    evaplot.GetData()
+    evaplot.CreatePlot()
     
 
 print('Evaluation finished')

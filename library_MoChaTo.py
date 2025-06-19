@@ -14,6 +14,7 @@ import json
 import h5py
 import numpy as np
 import scipy.optimize as opt
+import scipy.signal as sig
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
@@ -220,7 +221,7 @@ class FileData(PCA):
                     dataset = operant(dataset, argset)
             setattr(self, setname, dataset)
 
-    def ExtremaInflection(self, xdata:str, ydata:str):
+    def ExtremaInflection(self, xdata:str, ydata:str, order:int):
         '''
         Function to calculate extrema and points of inflection
 
@@ -254,9 +255,10 @@ class FileData(PCA):
         xvalues = getattr(self, xdata)
         yvalues = getattr(self, ydata)
 
-        extrema = np.apply_along_axis(
-            lambda y: Extrema(xvalues, y), axis=1, arr=yvalues
-        )
+        extrema = [
+            Extrema(xvalues, yvalues[i,:] , order)
+            for i in range(yvalues.shape[0])
+        ]
 
         print(extrema)
 
@@ -776,6 +778,7 @@ class PlotData:
         if rule.plot == 'errorbar':
             xerr = []
             yerr = []
+        scalfac = []    # list to store scaling factors for dataset
         labels = []     # list to store labels for data sets
         ls = []         # list to store line styles
         lw = []         # list to store line widths
@@ -785,6 +788,9 @@ class PlotData:
 
         # create cyclers for line styles, line widths, marker types,
         # marker sizes and colors
+        scalfaccycler = Cycler(
+            rule.scalfac if isinstance(rule.scalfac, list) else [rule.scalfac]
+        )
         lscycler = Cycler(
             rule.ls if isinstance(rule.ls, list) else [rule.ls]
         )
@@ -800,7 +806,6 @@ class PlotData:
         colorcycler = Cycler(
             rule.color if isinstance(rule.color, list) else [rule.color]
         )
-
 
         for i in range(len(rule.ydata)):
             for j in getattr(rule, f'{rule.sortby}rule'):
@@ -820,8 +825,8 @@ class PlotData:
                 # get ydata for current rule and append to ydata list
                 ydata.append(
                     np.stack([
-                        getattr(obj, rule.ydata[i]) for obj in self.data
-                        if getattr(obj, rule.sortby) == j
+                        scalfaccycler.Current()*getattr(obj, rule.ydata[i])
+                        for obj in self.data if getattr(obj, rule.sortby) == j
                     ], axis=0)
                 )
                 # if errorbar plot, get data for errors
@@ -874,16 +879,17 @@ class PlotData:
                         yerr.append(
                             np.full_like(ydata[i], 0.0, dtype=float)
                         )
+                
                 # create label for current rule and append to labels list
                 if len(rule.ydata) > 1:
-                    lstr = f'${rule.label[i]}$ at ${rule.sortby}={round(j,2)}$'
+                    lstr = f'{rule.label[i]} at ${rule.sortby}={round(j,2)}$'
                 else:
                     lstr = f'${rule.sortby}={round(j,2)}$'
                 labels.append([
                     lstr for obj in self.data if getattr(obj, rule.sortby) == j
                 ])
-                # append line styles, line widths, marker types, marker sizes
-                # and colors to corresponding lists
+                # append line styles, line widths, types, marker sizes and
+                # colors to corresponding lists
                 ls.append(
                     [lscycler.Current()
                      if ydata[-1].ndim == 1 else lscycler.Current()
@@ -911,6 +917,8 @@ class PlotData:
                 )
                 # increase cyclers if length of rule attributes does not match
                 # length of ydata
+                if len(scalfaccycler.iterable) != len(rule.ydata):
+                    scalfaccycler.Increase()
                 if len(lscycler.iterable) != len(rule.ydata):
                     lscycler.Increase()
                 if len(lwcycler.iterable) != len(rule.ydata):
@@ -922,7 +930,9 @@ class PlotData:
                 if len(colorcycler.iterable) != len(rule.ydata):
                     colorcycler.Increase()
             # increase cyclers if length of rule attributes matches
-            # length of ydata      
+            # length of ydata 
+            if len(scalfaccycler.iterable) == len(rule.ydata):
+                    scalfaccycler.Increase()    
             if len(lscycler.iterable) == len(rule.ydata):
                 lscycler.Increase()
             if len(lwcycler.iterable) == len(rule.ydata):
@@ -1019,16 +1029,16 @@ class PlotData:
             # plot data as diagram or histogram
             if rule.plot == 'diag':
                 # dicide wether to turn auto scale on or not
-                xup = rule.xlim[0]
-                xlow = rule.xlim[1]
-                yup = rule.ylim[0]
-                ylow = rule.ylim[1]
-                if xup and xlow and (type(xup), type(xlow)) != (float, float):
+                xlow = rule.xlim[0]
+                xup = rule.xlim[1]
+                ylow = rule.ylim[0]
+                yup = rule.ylim[1]
+                if xup or xlow:
                     xauto = False
                 else:
                     xauto = True
                 
-                if yup and ylow and (type(yup), type(ylow)) != (float, float):
+                if yup or ylow:
                     yauto = False
                 else:
                     yauto = True
@@ -1041,12 +1051,12 @@ class PlotData:
                     # plot data in Kratky plot
                     ydata[i] = ydata[i]*xdata[i]**2
                     ax.loglog(
-                        xdata[i], rule.scalfac*ydata[i], label=labels[i]
+                        xdata[i], ydata[i], label=labels[i]
                     )
                 else:
                     # plot data in normal plot
                     ax.plot(
-                        xdata[i], rule.scalfac*ydata[i], label=labels[i]
+                        xdata[i], ydata[i], label=labels[i]
                     )
                     ax.set_xscale(rule.xscale)
                     ax.set_yscale(rule.yscale)
@@ -1274,7 +1284,9 @@ def BalanceProfile(
     return np.squeeze(profile), float(b), float(devb)
 
 
-def Extrema(xdata:np.ndarray, ydata:np.ndarray) -> tuple[np.ndarray, int, int]:
+def Extrema(
+    xdata:np.ndarray, ydata:np.ndarray, order:int
+) -> np.ndarray:
     '''
     Function to compute the extrema of a series
 
@@ -1286,60 +1298,24 @@ def Extrema(xdata:np.ndarray, ydata:np.ndarray) -> tuple[np.ndarray, int, int]:
     extrema...                      ndarray containing all extrema i with 
                                     x-coordinate in [i] and y-coordinate
                                     in [i+1]
-    nmax...                         number of maxima
-    nmin...                         number of minima
     '''
-    maxind = (ydata[1:-1] >= ydata[:-2]) == (ydata[1:-1] >= ydata[2:])
-    minind = (ydata[1:-1] <= ydata[:-2]) == (ydata[1:-1] <= ydata[2:])
+    maxind = sig.argrelmax(ydata, order=order)[0]
+    minind = sig.argrelmin(ydata, order=order)[0]
 
-    xdata = xdata[1:-1]
-    xmaxdouble = xdata[maxind]
-    xmindouble = xdata[minind]
-    
-    ydata = ydata[1:-1]
-    ymax, maxcount = np.unique_counts(ydata[maxind])
-    ymin, mincount = np.unique_counts(ydata[minind])
+    xtrem = np.concat([xdata[maxind], xdata[minind]])
+    ytrem = np.concat([ydata[maxind], ydata[minind]])
 
-    maxcount = np.cumsum(maxcount)
-    mincount = np.cumsum(mincount)
+    ytrem = ytrem[np.argsort(xtrem)]
+    xtrem = np.argsort(xtrem)
 
-    xmax = np.zeros_like(ymax)
-    xmin = np.zeros_like(ymin)
+    extrema = np.array(list(zip(xtrem, ytrem)))
+    print(extrema)
 
-    for i in range(len(maxcount)):
-        if i:
-            lmax = maxcount[i-1]
-            lmin = mincount[i-1]
-        else:
-            lmax = 0
-            lmin = 0
-        if i+1 == len(xmaxdouble):
-            umax = -1
-            umin = -1
-        else:
-            umax = maxcount[i]
-            umin = mincount[i]
-        
-        if np.sum(xmaxdouble[lmax:umax]):
-            xmax[i] = np.mean(xmaxdouble[lmax:umax])
-        else:
-            xmax[i] = 0
-        if np.sum(xmindouble[lmin:umin]):
-            xmin[i] = np.mean(xmindouble[lmin:umin])
-        else:
-            xmin[i] = 0
-
-    xextrem = np.concatenate([xmax, xmin])
-
-    yextrem = np.concatenate([ymax, ymin])
-
-    extrema = np.array(zip(xextrem, yextrem))
-
-    return extrema, len(xmax), len(xmin)
+    return extrema.flatten()
 
 
 def Inflection(
-    xdata:np.ndarray, ydata:np.ndarray
+    xdata:np.ndarray, ydata:np.ndarray, order:int
 ) -> tuple[np.ndarray, int, int]:
     '''
     Function to compute the inflection points of a series
@@ -1355,4 +1331,4 @@ def Inflection(
     '''
     ydata = np.diff(ydata)
 
-    return Extrema(xdata[:-1], ydata)
+    return Extrema(xdata[:-1], ydata, order=order)
