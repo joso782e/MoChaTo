@@ -95,7 +95,7 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
             )
         )
         
-    DataObjs = [obj for obj in DataObjs if obj is not None]     # remove None
+    DataObjs = [obj for obj in DataObjs if obj]     # remove None
 
     for obj in DataObjs:
         # perform fit for radii of gyration
@@ -105,12 +105,20 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         )
         # compute compactness of polymers
         obj.compactness = obj.Rg1/obj.N
+        # compute balance profile
+        l1 = [obj.clmat[i,:,1] for i in range(obj.clmat.shape[0])]
+        l2 = [obj.clmat[i,:,2] for i in range(obj.clmat.shape[0])]
+        obj.BalanceProfile(sequence='positions', limits=(l1,l2), name='loop')
 
         # create calculate qqS
         obj.ManipulateData(args=['q', 'q', 'S'], setname='qqS', operant='*')
 
         # perform PCA on 'qqS'
-        obj.PerfPCA(setname='qqS') 
+        obj.PerfPCA(setname='qqS')
+
+        # bin balance profile data
+        obj.BinData(xdata='qqSc2', ydata='loopbalances')
+
 
     plotaspects = {}
 
@@ -148,48 +156,30 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     # label:        - str for what to use in labeling data sets: either N or f
     
     plotaspects['Nrule'] = [100]
-    plotaspects['frule'] = [1/4]
-    plotaspects['title']= 'PCs vs. q'
-    plotaspects['xlabel'] = r'$q$'
-    plotaspects['ylabel'] = r'$PC_i$'
-    plotaspects['xdata'] = 'q'
-    plotaspects['ydata'] = ['qqSPC1', 'qqSPC2']
+    plotaspects['frule'] = [1/4, 1/8, 1/12]
+    plotaspects['title']= 'Loop balance vs. PC2'
+    plotaspects['xlabel'] = r'$c_2$'
+    plotaspects['ylabel'] = r'$b_l$'
+    plotaspects['xdata'] = 'binmeanqqSc2'
+    plotaspects['ydata'] = 'binmeanloopbalances'
     plotaspects['xerr'] = '0'
     plotaspects['yerr'] = 'binerrb1'
-    plotaspects['xlim'] = [1e-2, None]
+    plotaspects['xlim'] = [None, None]
     plotaspects['ylim'] = [None, None]
-    plotaspects['xscale'] = 'log'
-    plotaspects['yscale'] = 'log'
-    plotaspects['scalfac'] = [
-        np.mean(obj.qqSc1) for obj in DataObjs
-        if set(plotaspects['Nrule']).issubset([obj.N])
-        and set(plotaspects['frule']).issubset([obj.f])
-    ].append([
-        np.mean(obj.qqSc2) for obj in DataObjs
-        if set(plotaspects['Nrule']).issubset([obj.N])
-        and set(plotaspects['frule']).issubset([obj.f])
-    ])
-    print([
-        np.mean(obj.qqSc1) for obj in DataObjs
-        if set(plotaspects['Nrule']).issubset([obj.N])
-        and set(plotaspects['frule']).issubset([obj.f])
-    ].append([
-        np.mean(obj.qqSc2) for obj in DataObjs
-        if set(plotaspects['Nrule']).issubset([obj.N])
-        and set(plotaspects['frule']).issubset([obj.f])
-    ]))
-    print(plotaspects['scalfac'])
-    plotaspects['ls'] = '-'
+    plotaspects['xscale'] = 'linear'
+    plotaspects['yscale'] = 'linear'
+    plotaspects['scalfac'] = 1
+    plotaspects['ls'] = 'None'
     plotaspects['lw'] = 1.5
     plotaspects['marker'] = 'o'
-    plotaspects['ms'] = 0.0
-    plotaspects['color'] = ['cyan', 'lime']
+    plotaspects['ms'] = 3.5
+    plotaspects['color'] = ['dodgerblue', 'limegreen', 'orangered']
     plotaspects['plotdomain'] = 'PCspace'
     plotaspects['plot'] = 'diag'
     plotaspects['sortby'] = 'f'
     plotaspects['legend'] = True
-    plotaspects['legend_loc'] = 'upper right'
-    plotaspects['label'] = ['Component 1', 'Component 2']
+    plotaspects['legend_loc'] = 'upper left'
+    plotaspects['label'] = [r'$b_3$']
 
     evaplot = lib.PlotData(plotaspects, DataObjs)
     evaplot.GetData()

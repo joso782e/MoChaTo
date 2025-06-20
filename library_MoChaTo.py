@@ -13,6 +13,7 @@ from os.path import exists
 import json
 import h5py
 import numpy as np
+from numpy.typing import NDArray
 import scipy.optimize as opt
 import scipy.signal as sig
 from sklearn.decomposition import PCA
@@ -176,6 +177,35 @@ class FileData(PCA):
         # set number of loops
         self.nl = [len(l) for l in self.ll]
 
+    def MonIntMat(self, d:float=1/2, b:float=1/4) -> NDArray:
+        '''
+        Function to cpmpute monomer interaction matrix, we consider next
+        neighbor interactions as well as interaction arising from loop
+        formations
+
+        Input:
+        d (dtype = float)...        next neighbor bond strength
+        b (dtype = float)...        loop formation bond strength
+
+        Output
+        cl (dtype = NDArray)...     monomer interaction matrix
+        '''
+        ic = np.full(self.N-1, d)
+        s_ic = np.diag(ic, 1) + np.diag(ic, -1)
+        cmall = []
+        for i in range(self.clmat.shape[0]):
+            for j in range(self.clmat.shape[1]):
+                ind1 = self.clmat[i,j,1]
+                ind2 = self.clmat[i,j,2]
+                if ind1 == ind2:
+                    continue
+                cm = np.zeros_like(s_ic)
+                cm[ind1,ind2] = b
+                cm[ind2,ind1] = b
+                cmall.append(cm + s_ic)
+        
+        return cmall
+
     def ManipulateData(
             self,  args:list[str], setname:str, operant:str, axis:int=None
         ):
@@ -338,10 +368,10 @@ class FileData(PCA):
                                         1 for blockiness of crosslinker
                                         sequence 
                                         2 for reactive blockiness
-                                        3 for crosslinker blockiness
+                                        3 for crosslinker/backbone blockiness
                                         4 for activeted blockiness
         normalize (dtype = bool)...     wether blockiness should be normalized
-                                        (True) or nor (False)
+                                        (True) or not (False)
         
         Output:
         updates self with new attributes as follows:
@@ -357,7 +387,7 @@ class FileData(PCA):
         setattr(self, f'b{blocktype}', b)
 
     def BinData(
-            self, xdata:str, ydata:str, bins:np.ndarray,
+            self, xdata:str, ydata:str, bins:np.ndarray=20,
             xlower:float=None, xupper:float=None
     ) -> None:
         '''
