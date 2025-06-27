@@ -64,14 +64,14 @@ with open(
 
 
 import os
-import sys
 from os.path import exists
+import sys
 sys.path.append(os.path.dirname(__file__))
-import library_MoChaTo as lib
+import data_evaluation.Scripts.MoChaTo_datalib as datalib
+import data_evaluation.Scripts.MoChaTo_plotlib as plotlib
 import glob
 import h5py
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 # print statement if the script is executed
@@ -91,7 +91,7 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     with h5py.File(path, 'r') as file:
         file.visit(
             lambda x: DataObjs.append(
-                lib.filter_func(name=x, file=file)
+                datalib.filter_func(name=x, file=file)
             )
         )
         
@@ -105,19 +105,16 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         )
         # compute compactness of polymers
         obj.compactness = obj.Rg1/obj.N
-        # compute balance profile
-        l1 = [obj.clmat[i,:,1] for i in range(obj.clmat.shape[0])]
-        l2 = [obj.clmat[i,:,2] for i in range(obj.clmat.shape[0])]
-        obj.BalanceProfile(sequence='positions', limits=(l1,l2), name='loop')
 
-        # create calculate qqS
+        # compute and diagonalize Rouse matrix
+        obj.RouseMatrix()
+        obj.SolveEigenProblem(matrices='rouse')
+    
+        # calculate qqS
         obj.ManipulateData(args=['q', 'q', 'S'], setname='qqS', operant='*')
 
         # perform PCA on 'qqS'
         obj.PerfPCA(setname='qqS')
-
-        # bin balance profile data
-        obj.BinData(xdata='qqSc2', ydata='loopbalances')
 
 
     plotaspects = {}
@@ -157,18 +154,17 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     
     plotaspects['Nrule'] = [100]
     plotaspects['frule'] = [1/4, 1/8, 1/12]
-    plotaspects['title']= 'Loop balance vs. PC2'
-    plotaspects['xlabel'] = r'$c_2$'
-    plotaspects['ylabel'] = r'$b_l$'
-    plotaspects['xdata'] = 'binmeanqqSc2'
-    plotaspects['ydata'] = 'binmeanloopbalances'
+    plotaspects['title']= r'Trace of Rouse matrix vs. $c_1$'
+    plotaspects['xlabel'] = r'$c_1$'
+    plotaspects['ylabel'] = r'$tr(M)$'
+    plotaspects['xdata'] = 'qqSc1'
+    plotaspects['ydata'] = 'rousetrace'
     plotaspects['xerr'] = '0'
     plotaspects['yerr'] = 'binerrb1'
     plotaspects['xlim'] = [None, None]
     plotaspects['ylim'] = [None, None]
     plotaspects['xscale'] = 'linear'
     plotaspects['yscale'] = 'linear'
-    plotaspects['scalfac'] = 1
     plotaspects['ls'] = 'None'
     plotaspects['lw'] = 1.5
     plotaspects['marker'] = 'o'
@@ -179,9 +175,9 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['sortby'] = 'f'
     plotaspects['legend'] = True
     plotaspects['legend_loc'] = 'upper left'
-    plotaspects['label'] = [r'$b_3$']
+    plotaspects['label'] = ['f']
 
-    evaplot = lib.PlotData(plotaspects, DataObjs)
+    evaplot = plotlib.PlotData(plotaspects, DataObjs)
     evaplot.GetData()
     evaplot.CreatePlot()
     
