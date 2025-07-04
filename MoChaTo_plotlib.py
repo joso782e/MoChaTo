@@ -13,7 +13,7 @@ import os
 from os.path import exists
 import sys
 sys.path.append(os.path.dirname(__file__))
-import data_evaluation.Scripts.MoChaTo_datalib as datalib
+import MoChaTo_datalib as datalib
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -238,9 +238,6 @@ class PlotData:
         )
 
         for i in range(len(rule.ydata)):
-            for obj in self.data:
-                if not hasattr(obj, f'{rule.ydata[i]}scalfac'):
-                    setattr(obj, f'{rule.ydata[i]}scalfac', obj.scalfac)
             for j in getattr(rule, f'{rule.sortby}rule'):
                 # check if data set with current rule exists
                 if len([
@@ -258,8 +255,7 @@ class PlotData:
                 # get ydata for current rule and append to ydata list
                 ydata.append(
                     np.stack([
-                        getattr(obj, f'{rule.ydata[i]}scalfac')\
-                        *getattr(obj, rule.ydata[i]) for obj in self.data
+                        getattr(obj, rule.ydata[i]) for obj in self.data
                         if getattr(obj, rule.sortby) == j
                     ], axis=0)
                 )
@@ -316,7 +312,7 @@ class PlotData:
                 
                 # create label for current rule and append to labels list
                 if len(rule.ydata) > 1:
-                    lstr = f'{rule.label[i]} at ${rule.sortby}={round(j,2)}$'
+                    lstr = f'{rule.label[i]}'
                 else:
                     lstr = f'${rule.sortby}={round(j,2)}$'
                 labels.append([

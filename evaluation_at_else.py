@@ -34,7 +34,7 @@ search_crit = root_dir + '\\**\\*.hdf5'.replace('\\\\', seperator)
 
 filter_obj = 'swell_sqiso_key'
 eva_path = root_dir +\
-    '\\data_evaluation\\script_evaluation\\PCA_on_qqS'.replace('\\\\', seperator)
+    '\\data_evaluation\\script_evaluation\\PCA_on_S'.replace('\\\\', seperator)
 
 
 config = {
@@ -67,8 +67,8 @@ import os
 from os.path import exists
 import sys
 sys.path.append(os.path.dirname(__file__))
-import data_evaluation.Scripts.MoChaTo_datalib as datalib
-import data_evaluation.Scripts.MoChaTo_plotlib as plotlib
+import MoChaTo_datalib as datalib
+import MoChaTo_plotlib as plotlib
 import glob
 import h5py
 import numpy as np
@@ -95,27 +95,6 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
             )
         )
         
-    DataObjs = [obj for obj in DataObjs if obj]     # remove None
-
-    for obj in DataObjs:
-        # perform fit for radii of gyration
-        obj.PerfFit(
-            FitFunc=FitGyraRad, xdata='q', ydata='S', fitname='Rg',
-            xlim=(None, 2e-2)
-        )
-        # compute compactness of polymers
-        obj.compactness = obj.Rg1/obj.N
-
-        # compute and diagonalize Rouse matrix
-        obj.RouseMatrix()
-        obj.SolveEigenProblem(matrices='rouse')
-    
-        # calculate qqS
-        obj.ManipulateData(args=['q', 'q', 'S'], setname='qqS', operant='*')
-
-        # perform PCA on 'qqS'
-        obj.PerfPCA(setname='qqS')
-
 
     plotaspects = {}
 
@@ -153,29 +132,65 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     # label:        - str for what to use in labeling data sets: either N or f
     
     plotaspects['Nrule'] = [100]
-    plotaspects['frule'] = [1/4, 1/8, 1/12]
-    plotaspects['title']= r'Trace of Rouse matrix vs. $c_1$'
-    plotaspects['xlabel'] = r'$c_1$'
-    plotaspects['ylabel'] = r'$tr(M)$'
-    plotaspects['xdata'] = 'qqSc1'
-    plotaspects['ydata'] = 'rousetrace'
+    plotaspects['frule'] = [1/8]
+    plotaspects['title']= r'Magnitude of PCs compared with standard deviation of $qqS$ in $q$-space'
+    plotaspects['xlabel'] = r'$q$'
+    plotaspects['ylabel'] = r'$qqS$'
+    plotaspects['xdata'] = 'q'
+    plotaspects['ydata'] = [
+        'scaledSPC1', 'scaledSPC2', 'varS'
+    ]
     plotaspects['xerr'] = '0'
     plotaspects['yerr'] = 'binerrb1'
     plotaspects['xlim'] = [None, None]
     plotaspects['ylim'] = [None, None]
     plotaspects['xscale'] = 'linear'
     plotaspects['yscale'] = 'linear'
-    plotaspects['ls'] = 'None'
+    plotaspects['ls'] = '-'
     plotaspects['lw'] = 1.5
     plotaspects['marker'] = 'o'
-    plotaspects['ms'] = 3.5
-    plotaspects['color'] = ['dodgerblue', 'limegreen', 'orangered']
+    plotaspects['ms'] = 0.0
+    plotaspects['color'] = ['cyan', 'limegreen', 'black']
     plotaspects['plotdomain'] = 'PCspace'
     plotaspects['plot'] = 'diag'
-    plotaspects['sortby'] = 'f'
+    plotaspects['sortby'] = 'N'
     plotaspects['legend'] = True
     plotaspects['legend_loc'] = 'upper left'
-    plotaspects['label'] = ['f']
+    plotaspects['label'] = [
+        'scaled component 1', 'scaled component 2', r'$\sigma_{S}$',
+    ]
+
+
+    # remove None and select relevant data objects
+    DataObjs = [
+        obj for obj in DataObjs if obj and (
+            obj.N in plotaspects['Nrule'] and obj.f in plotaspects['frule']
+        )
+    ]
+
+    for obj in DataObjs:
+        # perform fit for radii of gyration
+        obj.PerfFit(
+            FitFunc=FitGyraRad, xdata='q', ydata='S', fitname='Rg',
+            xlim=(None, 2e-2)
+        )
+        # compute compactness of polymers
+        obj.compactness = obj.Rg1/obj.N
+
+        # calculate qqS
+        obj.ManipulateData(args=['q', 'q', 'S'], setname='qqS', operant='*')
+
+        # perform PCA on 'qqS'
+        obj.PerfPCA(setname='S')
+
+        # scale principle components
+        scale1 = np.sqrt(np.mean(obj.Sc1**2))
+        obj.ScaleData('SPC1', scale1)
+        scale2 = np.sqrt(np.mean(obj.Sc2**2))
+        obj.ScaleData('SPC2', scale2)
+
+        obj.MeanVariance('S', axis=0)
+
 
     evaplot = plotlib.PlotData(plotaspects, DataObjs)
     evaplot.GetData()

@@ -40,11 +40,8 @@ class FileData(PCA):
     - S:            form factor in q-space
     - clmat:        crosslink matrix
     - sequence:     monomer sequence
-    - mS:           mean of form factor in q-space
-    - empvar:       empirical variance of form factor in q-space
 
-    calling further class methods those attributes may be appendixed by
-    individual attributes
+    calling further class methods may extend those attributes with new ones
     '''   
     # define contructor
     def __init__(
@@ -60,7 +57,7 @@ class FileData(PCA):
         *,
         copy=True,
         whiten=False,
-        svd_solver="auto",
+        svd_solver = "auto",
         tol=0.0,
         iterated_power="auto",
         n_oversamples=10,
@@ -86,8 +83,6 @@ class FileData(PCA):
         self.S = S
         self.clmat = np.asanyarray(clmat, dtype=np.int_)
         self.sequence = sequence
-        self.EmpEva()
-        self.scalfac = 1
 
     @staticmethod
     def ExtractFileData(file:h5py.File, path:str, filter_obj:str, ncomps:int):
@@ -140,22 +135,6 @@ class FileData(PCA):
             n_components=ncomps, condi=Cond, N=NChain, f=InterconDens, q=qKey,
             S=SData, clmat=crosslinks, sequence=sequence
         )
-    
-    def EmpEva(self) -> None:
-        '''
-        Function to perform evaluation on empiric data and store results in
-        self,
-        updates self with new attributes as follows:
-        - self.mS:          mean of form factor in q-space
-        - self.emperr:      empirical error of form factor in q-space
-        - self.LL:          loop length per SCNP
-        - self.mll:         mean loop length per SCNP
-        - self.nl:          number of loops per SCNP
-        '''
-        self.mS = np.mean(self.S, axis=0)
-        self.emperr = np.sqrt(
-            np.mean((self.S - self.mS)**2/self.mS**2, axis=0)
-        )
 
     def LLCalc(self) -> None:
         '''
@@ -175,130 +154,6 @@ class FileData(PCA):
         self.mll = ([np.mean(l) if len(l) > 0 else 0 for l in self.ll])
         # set number of loops
         self.nl = [len(l) for l in self.ll]
-
-    def RouseMatrix(self) -> NDArray:
-        '''
-        Function to compute the generalized Rouse matrix for all polymers
-
-        Input:
-        
-
-        Output:
-        '''
-        clmat = self.clmat
-        rouse = []
-        
-        for i in range(clmat.shape[0]):
-            cls = [
-                (clmat[i,j,1], clmat[i,j,2]) for j in range(clmat.shape[1])
-                if clmat[i,j,0] != 0
-            ]
-            rouse.append(RouseMatrix(self.N, cls))
-        
-        self.rouse = rouse
-        return rouse
-    
-    def Entropy(self) -> NDArray:
-        '''
-        
-        '''
-
-        if hasattr(self, 'rouse'):
-            rouse = self.rouse
-        else:
-            rouse = self.RouseMatrix()
-
-        if hasattr(self, 'rouseeigv') and hasattr(self, 'rouseeigf'):
-            eigv = getattr(self, 'rouseeigv')
-            eigf = getattr(self, 'rouseeigf')
-        else:
-            eigv, eigf = self.SolveEigenProblem(matrices='rouse')
-
-    def ManipulateData(
-            self,  args:list[str], setname:str, operant:str, axis:int=None
-        ):
-        '''
-        Function to manipulate excisting datasets
-
-        Input
-        - args (dtype = list[str])...   list of attributes to be used to
-                                        manipulate data for PCA
-        - setname (dtype = str)...      category attribute name for results,
-                                        see description of output
-        - operant (dtype = str)...      operant to be used to manipulate data
-                                        before PCA, can be '+', '-', '*',
-                                        'concatenate' or 'None' for no
-                                        manipulation
-        - axis (dtype = int)...         if operant is 'concatenate'
-                                        specifies on which axis to concatenate
-                                        
-        '''
-        concataxis = None
-        if operant == '+':
-            operant = np.add
-            dataset = 0
-        elif operant == '-':
-            operant = np.subtract
-            dataset = 0
-        elif operant == '*':
-            operant = np.multiply
-            dataset = 1
-        elif operant == 'concatenate':
-            operant = np.concat
-            concataxis = axis
-        
-        if operant not in [np.add, np.subtract, np.multiply]:
-            dataset = getattr(self, args[0])
-        else:
-            for arg in args:
-                argset = getattr(self, arg)
-                if concataxis:
-                    dataset = (dataset, argset)
-                    dataset = operant(dataset, axis=concataxis)
-                else:
-                    dataset = operant(dataset, argset)
-            setattr(self, setname, dataset)
-
-    def ExtremaInflection(self, xdata:str, ydata:str, order:int):
-        '''
-        Function to calculate extrema and points of inflection
-
-        Input:
-        xdata (dtype = str)...          str describing atribute of FileData
-                                        object containing x-values
-        ydata (dtype = str)...          str describing atribute of FileData
-                                        object containing y-values
-                                
-        Output:
-        updates self with new attributes as follows:
-        - self.ext{ydata}...            ndarray containing all extrema j with
-                                        x-coordinate in [i,j] and y-coordinate
-                                        in [i,j+1]
-        - self.nmax{ydata}...           number of maxima in ydata
-        - self.nmin{ydata}...           number of minima in ydata
-        - self.inf{ydata}...            ndarray containing all inflections j
-                                        with x-coordinate in [i,j] and
-                                        y-coordinate in [i,j+1]
-        '''
-        if not hasattr(self, xdata):
-            raise AttributeError(
-               f'FileData object  does not have {xdata} as attribute. Please '
-                'give a valid attribute name for "xdata".'
-            )
-        if not hasattr(self, ydata):
-            raise AttributeError(
-               f'FileData object  does not have {ydata} as attribute. Please '
-                'give a valid attribute name for "ydata".'
-            )
-        xvalues = getattr(self, xdata)
-        yvalues = getattr(self, ydata)
-
-        extrema = [
-            Extrema(xvalues, yvalues[i,:] , order)
-            for i in range(yvalues.shape[0])
-        ]
-
-        print(extrema)
 
     def BalanceProfile(
             self, sequence:str, limits:tuple[np.ndarray], name:str
@@ -394,6 +249,178 @@ class FileData(PCA):
 
         setattr(self, f'b{blocktype}', b)
 
+    def RouseMatrix(self) -> NDArray:
+        '''
+        Function to compute the generalized Rouse matrix for all polymers
+
+        Input:
+        
+
+        Output:
+        '''
+        clmat = self.clmat
+        rouse = []
+        
+        for i in range(clmat.shape[0]):
+            cls = [
+                (clmat[i,j,1], clmat[i,j,2]) for j in range(clmat.shape[1])
+                if clmat[i,j,0] != 0
+            ]
+            rouse.append(RouseMatrix(self.N, cls))
+        
+        self.rouse = rouse
+        return rouse
+    
+    def Ideality(self) -> NDArray:
+        '''
+        Function to compute swelling ratio or chain ideality
+        '''
+        if not hasattr(self, 'Rg1'):
+            def FitGyraRad(x, a0, a1):
+                '''
+                Function for fitting radii of gyration to form factor 
+                '''
+                return a0 - 1/3*(a1*x)**2
+            
+            self.PerfFit(
+                FitFunc=FitGyraRad, xdata='q', ydata='S', fitname='Rg',
+                xlim=(None, 2e-2)
+            )
+        
+        Rg1 = self.Rg1
+
+        if not hasattr(self, 'rouse'):
+            self.RouseMatrix()
+
+        if not hasattr(self, 'rouseeigv'):
+            self.SolveEigenProblem(matrices='rouse')
+        
+        ideality = [
+            self.Rg1[i]*self.N**(0.5)/np.sqrt(np.sum(1/self.rouseeigv[i]))
+            for i in range(len(self.rouseeigv))
+        ]
+
+        setattr(self, 'ideality', ideality)
+        return ideality
+    
+    def MeanVariance(
+        self, setname:str, axis:int, normalizedvar:bool=False
+    ) -> tuple[NDArray]:
+        '''
+        Function to compute mean and variance of an arbitrary dataset along a
+        given axis
+
+        Input:
+
+        Output:
+
+        
+        updates self with new attributes as follows:
+        - self.m{setname}:          mean of dataset
+        - self.var{setname}:        variannce of dataset
+        '''
+        data = getattr(self, setname)
+        mean = np.mean(data, axis=axis)
+
+        if normalizedvar:
+            var = np.sqrt(
+                np.mean((data - mean)**2/mean**2, axis=axis)
+            )
+        else:
+            var = np.sqrt(
+                np.mean((data - mean)**2, axis=axis)
+            )
+        
+        setattr(self, f'mean{setname}', mean)
+        setattr(self, f'var{setname}', var)
+        return mean, var
+
+    def ManipulateData(
+            self,  args:list[str], setname:str, operant:str, axis:int=None
+        ):
+        '''
+        Function to manipulate excisting datasets
+
+        Input
+        - args (dtype = list[str])...   list of attributes to be used to
+                                        manipulate data for PCA
+        - setname (dtype = str)...      category attribute name for results,
+                                        see description of output
+        - operant (dtype = str)...      operant to be used to manipulate data
+                                        before PCA, can be '+', '-', '*',
+                                        'concatenate' or 'None' for no
+                                        manipulation
+        - axis (dtype = int)...         if operant is 'concatenate'
+                                        specifies on which axis to concatenate
+                                        
+        '''
+        concataxis = None
+        if operant == '+':
+            operant = np.add
+            dataset = 0
+        elif operant == '-':
+            operant = np.subtract
+            dataset = 0
+        elif operant == '*':
+            operant = np.multiply
+            dataset = 1
+        elif operant == 'concatenate':
+            operant = np.concat
+            concataxis = axis
+        
+        if operant not in [np.add, np.subtract, np.multiply]:
+            dataset = getattr(self, args[0])
+        else:
+            for arg in args:
+                argset = getattr(self, arg)
+                if concataxis:
+                    dataset = [dataset, argset]
+                    dataset = operant(dataset, axis=concataxis)
+                else:
+                    dataset = operant(dataset, argset)
+            setattr(self, setname, dataset)
+
+    def ExtremaInflection(self, xdata:str, ydata:str, order:int):
+        '''
+        Function to calculate extrema and points of inflection
+
+        Input:
+        xdata (dtype = str)...          str describing atribute of FileData
+                                        object containing x-values
+        ydata (dtype = str)...          str describing atribute of FileData
+                                        object containing y-values
+                                
+        Output:
+        updates self with new attributes as follows:
+        - self.ext{ydata}...            ndarray containing all extrema j with
+                                        x-coordinate in [i,j] and y-coordinate
+                                        in [i,j+1]
+        - self.nmax{ydata}...           number of maxima in ydata
+        - self.nmin{ydata}...           number of minima in ydata
+        - self.inf{ydata}...            ndarray containing all inflections j
+                                        with x-coordinate in [i,j] and
+                                        y-coordinate in [i,j+1]
+        '''
+        if not hasattr(self, xdata):
+            raise AttributeError(
+               f'FileData object  does not have {xdata} as attribute. Please '
+                'give a valid attribute name for "xdata".'
+            )
+        if not hasattr(self, ydata):
+            raise AttributeError(
+               f'FileData object  does not have {ydata} as attribute. Please '
+                'give a valid attribute name for "ydata".'
+            )
+        xvalues = getattr(self, xdata)
+        yvalues = getattr(self, ydata)
+
+        extrema = [
+            Extrema(xvalues, yvalues[i,:] , order)
+            for i in range(yvalues.shape[0])
+        ]
+
+        print(extrema)
+
     def SolveEigenProblem(self, matrices:str) -> tuple[list]:
         '''
         Function to solve eigenvalue problem for a list of matrices using
@@ -428,8 +455,8 @@ class FileData(PCA):
         for m in getattr(self, matrices):
             eigv1, eigf1 = lin.eigh(m)
 
-            eigv.append(eigv1)
-            eigf.append(eigf1)
+            eigv.append(eigv1[np.abs(eigv1) > 1e-10])
+            eigf.append(eigf1[np.abs(eigv1) > 1e-10])
             specrad.append(np.max(np.abs(eigv1)))
                     
         setattr(self, f'{matrices}eigv', eigv)
@@ -445,24 +472,27 @@ class FileData(PCA):
         if hasattr(self, f'{matrices}eigv'):
             eigv = getattr(self, f'{matrices}eigv')
         else:
-            matlis = getattr(self, matrices)
             eigv, _ = self.SolveEigenProblem(matrices=matrices)
         
         trace = [np.sum(m) for m in eigv]
+
+        setattr(self, f'{matrices}trace', trace)
 
         return trace
     
     def Determinant(self, matrices:str) -> list[float]:
         '''
-        
+        Function to compute pseudo-determinant of a list of matrices using
+        their eigenvalues
         '''
         if hasattr(self, f'{matrices}eigv'):
             eigv = getattr(self, f'{matrices}eigv')
         else:
-            matlis = getattr(self, matrices)
             eigv, _ = self.SolveEigenProblem(matrices=matrices)
 
         det = [np.prod([m for m in eig if m != 0]) for eig in eigv]
+
+        setattr(self, f'{matrices}det', det)
 
         return det
 
@@ -518,6 +548,15 @@ class FileData(PCA):
         setattr(self, f'binmean{ydata}', y)
         setattr(self, f'binerr{ydata}', yerr)
 
+    def ScaleData(self, setname:str, scalfac:NDArray[np.float64]):
+        '''
+        
+        '''
+
+        data = getattr(self, setname)
+        setattr(self, f'scaled{setname}', scalfac*data)
+        return scalfac*data
+
     def PerfPCA(
             self, setname:str, transpose:bool=False
         ) -> None:
@@ -544,9 +583,9 @@ class FileData(PCA):
         )
         for i in range(self.n_components):
             setattr(self, f'{setname}c{i+1}', trafo[:,i])
-            setattr(self, f'{setname}PC{i+1}', self.components_[i,:])
+            setattr(self, f'{setname}PC{i+1}', self.components_[i,:])        
         
-    def PerfRecon(self, setname:str) -> None:
+    def PerfRecon(self, setname:str, normalize:bool=True) -> None:
         '''
         Function to calculate reconstructed date and related quantities from
         PCA
@@ -554,6 +593,7 @@ class FileData(PCA):
         Input:
         setname (dtype = str)...        category attribute name of dataset to
                                         perform reconstruction from PCA
+        normalize 
 
         Output:
         updates self with new attributes as follows:
@@ -588,10 +628,15 @@ class FileData(PCA):
         # calculate difference between original and reconstructed data
         diff = data - recon
 
-        # calculate relative reconstruction error in q-space
-        re = np.sqrt(np.mean((diff/data)**2, axis=0))
-        # variance of error
-        revar = np.sqrt(np.mean((diff/data-re)**2, axis=0))
+        # calculate reconstruction error in q-space and normalize if specified
+        if normalize:
+            re = np.sqrt(np.mean((diff/data)**2, axis=0))
+            # variance of error
+            revar = np.sqrt(np.mean((diff/data-re)**2, axis=0))
+        else:
+            re = np.sqrt(np.mean((diff)**2, axis=0))
+            # variance of error
+            revar = np.sqrt(np.mean((diff-re)**2, axis=0))
 
         # calculate relative mean reonstruction error
         mre = np.mean(re)
@@ -726,11 +771,7 @@ def filter_func(
 
         DataObj = FileData.ExtractFileData(file=file, path=name,\
                                            filter_obj=filter_obj,\
-                                           ncomps=NComps)
-        
-        DataObj.EmpEva()                # perform empirical evaluation
-        DataObj.LLCalc()                # calculate loop length and mean
-        
+                                           ncomps=NComps)        
 
         # print separator line to indicate end of one condition evaluation in 
         # terminal for debugging
@@ -909,21 +950,21 @@ def RouseMatrix(N:int, cls:list[tuple]=[]) -> NDArray:
     (see Sommer and Blumen on generalized Gaussian structures)
 
     Input:
-    cl (dtype = list[tuple])...     list of tuples, each tuple contains the
-                                    link's monomers
     N (dtype = int)...              number of monomers
     linchain (dtype = bool)...      boolean wether constructing Rouse matrix
                                     for linear chain (True) molecule or not
                                     (False)
+    cls (dtype = list[tuple])...     list of tuples, each tuple contains the
+                                    link's monomers
 
     Output:
     rouse (dtype = NDArray)...      the constructed Rouse matrix, it is of
                                     dimension N x N
     '''
     rouse = np.full(N, 2)
-    rouse[0] = 1
-    rouse[-1] = 1
-    rouse = np.diag(rouse)
+    rouse = np.diag(rouse) - np.diag(rouse[1:]-1, k=1) - np.diag(rouse[1:]-1, k=-1)
+    rouse[0,0] = 1
+    rouse[-1,-1] = 1
 
     if len(cls) == 0:
         # if no crosslinker sequence is given, return the Rouse matrix
@@ -934,8 +975,90 @@ def RouseMatrix(N:int, cls:list[tuple]=[]) -> NDArray:
         j = int(cl[1] - 1)
         rouse[i,i] += 1
         rouse[j,j] += 1
-        if i != j:
-            rouse[i,j] -= 1
-            rouse[j,i] -= 1
-
+        rouse[i,j] -= 1
+        rouse[j,i] -= 1
     return rouse
+
+
+def FiniteSum(kterm, kstart:int, kstop:int) -> float:
+    '''
+    Function
+    '''
+    finalsum = 0
+    for k in range(kstart, kstop+1):
+        finalsum += kterm(k)
+
+    return finalsum
+
+
+def ConformationType1(i:tuple[int,int], j:tuple[int,int]) -> int:
+    '''
+    Function to compare two loops with each other and determine their
+    conformation class in the type 1 convention
+
+    Input:
+    i (dtype = tuple)...        start and end values of first loop
+    j (dtype = tuple)...        start end end values of second loop
+
+    Output:
+    conclass (dtype = int)...   conformation class:
+                                 - 1: loops in series
+                                 - 2: loops entangled
+                                 - 3: loops parallel
+    '''
+    if i[0] < i[1]:
+        istart = i[0]
+        iend = i[1]
+    else:
+        istart = i[1]
+        iend = i[0]
+    
+    if j[0] < j[1]:
+        jstart = j[0]
+        jend = j[1]
+    else:
+        jstart = j[1]
+        jend = j[0]
+    
+    if jstart < istart:
+        istart, jstart = jstart, istart
+        iend, jend = jend, iend
+
+    conclass = 1
+
+    if iend > jstart:
+        conclass += 1
+    if iend > jend:
+        conclass += 1
+
+    return conclass  
+
+
+def ConformationRatio(cls:list[tuple]) -> tuple[float,float,float]:
+    '''
+    Input:
+    cls (dtype = list[tuple])...    list of tuples, each tuple contains the
+                                    link's monomers
+
+    Output:
+    p1 (dtype = float)...           ration of conformation class 1
+    p2 (dtype = float)...           ration of conformation class 2
+    p3 (dtype = float)...           ration of conformation class 3
+    '''
+    L = len(cls)
+    N = L*(L - 1)/2
+    loopcon = np.zeros((L, L), dtype=int)
+
+    for ind, _ in np.ndenumerate(loopcon):
+        i = cls[ind[0]]
+        j = cls[ind[1]]
+        if i == j:
+            continue
+
+        loopcon[ind] = ConformationType1(i, j)
+    
+    p1 = np.sum(loopcon == 1)/2/N
+    p2 = np.sum(loopcon == 2)/2/N
+    p3 = np.sum(loopcon == 3)/2/N
+
+    
