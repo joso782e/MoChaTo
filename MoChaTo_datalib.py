@@ -238,7 +238,7 @@ class FileData(PCA):
         
         Output:
         updates self with new attributes as follows:
-        - self.b{blocktype}:...          blockiness type x of SCNP
+        - self.b{blocktype}...          blockiness type x of SCNPs
         '''
         sequence = self.sequence
         b = np.apply_along_axis(
@@ -257,6 +257,8 @@ class FileData(PCA):
         
 
         Output:
+        updates self with new attributes as follows:
+        - self.rouse...             generalized rouse matrix of SCNPs
         '''
         clmat = self.clmat
         rouse = []
@@ -274,6 +276,12 @@ class FileData(PCA):
     def Ideality(self) -> NDArray:
         '''
         Function to compute swelling ratio or chain ideality
+
+        Input:
+
+        Output:
+        updates self with new attributes as follows:
+        - slef.ideality...          swelling ratio/ideality degree of SCNPs
         '''
         if not hasattr(self, 'Rg1'):
             def FitGyraRad(x, a0, a1):
@@ -286,8 +294,6 @@ class FileData(PCA):
                 FitFunc=FitGyraRad, xdata='q', ydata='S', fitname='Rg',
                 xlim=(None, 2e-2)
             )
-        
-        Rg1 = self.Rg1
 
         if not hasattr(self, 'rouse'):
             self.RouseMatrix()
@@ -303,6 +309,45 @@ class FileData(PCA):
         setattr(self, 'ideality', ideality)
         return ideality
     
+    def ConClassRatio(self) -> tuple[list,list,list]:
+        '''
+        Function to compute the conformation class ratios by the type 1 loop
+        conformation convention for several molecules
+
+        Input:
+
+        Output:
+        updates self with new attributes as follows:
+        - self.conratio1...         ratio for loops in series
+        - self.conratio2...         ratio for entagled loop conformations
+        - self.conratio3...         ratio for parallel loop conformations
+        '''
+        clmat = self.clmat
+
+        conratio1 = []
+        conratio2 = []
+        conratio3 = []
+
+
+        for k in range(clmat.shape[0]):
+            i = [n for n in clmat[k,:,1] if n]
+            j = [n for n in clmat[k,:,2] if n]
+
+            cls = [(i[n], j[n]) for n in len(i)]
+
+            p1, p2, p3 = ConClassRatio(cls)
+
+            conratio1.append(p1)
+            conratio2.append(p2)
+            conratio3.append(p3)
+
+        self.conratio1 = conratio1
+        self.conratio2 = conratio2
+        self.conratio3 = conratio3
+
+        return conratio1, conratio2, conratio3
+
+
     def MeanVariance(
         self, setname:str, axis:int, normalizedvar:bool=False
     ) -> tuple[NDArray]:
@@ -311,6 +356,9 @@ class FileData(PCA):
         given axis
 
         Input:
+        setname (dtype = str)...
+        axis (dtype = int)...
+        normalizedvar (dtype = bool)...
 
         Output:
 
@@ -352,7 +400,9 @@ class FileData(PCA):
                                         manipulation
         - axis (dtype = int)...         if operant is 'concatenate'
                                         specifies on which axis to concatenate
-                                        
+
+        Output:
+        updates self with new attributes as follows:
         '''
         concataxis = None
         if operant == '+':
@@ -418,8 +468,6 @@ class FileData(PCA):
             Extrema(xvalues, yvalues[i,:] , order)
             for i in range(yvalues.shape[0])
         ]
-
-        print(extrema)
 
     def SolveEigenProblem(self, matrices:str) -> tuple[list]:
         '''
@@ -994,7 +1042,8 @@ def FiniteSum(kterm, kstart:int, kstop:int) -> float:
 def ConformationType1(i:tuple[int,int], j:tuple[int,int]) -> int:
     '''
     Function to compare two loops with each other and determine their
-    conformation class in the type 1 convention
+    conformation class in the type 1 convention, further explanations can be
+    found in the Bachelor thesis
 
     Input:
     i (dtype = tuple)...        start and end values of first loop
@@ -1034,8 +1083,12 @@ def ConformationType1(i:tuple[int,int], j:tuple[int,int]) -> int:
     return conclass  
 
 
-def ConformationRatio(cls:list[tuple]) -> tuple[float,float,float]:
+def ConClassRatio(cls:list[tuple]) -> tuple[float,float,float]:
     '''
+    Function to compute the conformation class ratios by the type 1 loop
+    conformation convention, further explanations can be found in the Bachelor
+    thesis
+
     Input:
     cls (dtype = list[tuple])...    list of tuples, each tuple contains the
                                     link's monomers
@@ -1046,7 +1099,7 @@ def ConformationRatio(cls:list[tuple]) -> tuple[float,float,float]:
     p3 (dtype = float)...           ration of conformation class 3
     '''
     L = len(cls)
-    N = L*(L - 1)/2
+    C = L*(L - 1)/2
     loopcon = np.zeros((L, L), dtype=int)
 
     for ind, _ in np.ndenumerate(loopcon):
@@ -1057,8 +1110,8 @@ def ConformationRatio(cls:list[tuple]) -> tuple[float,float,float]:
 
         loopcon[ind] = ConformationType1(i, j)
     
-    p1 = np.sum(loopcon == 1)/2/N
-    p2 = np.sum(loopcon == 2)/2/N
-    p3 = np.sum(loopcon == 3)/2/N
+    p1 = np.sum(loopcon == 1)/2/C
+    p2 = np.sum(loopcon == 2)/2/C
+    p3 = np.sum(loopcon == 3)/2/C
 
-    
+    return p1, p2, p3

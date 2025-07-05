@@ -177,17 +177,13 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         # compute compactness of polymers
         obj.compactness = obj.Rg1/obj.N
 
+        obj.ConformationRatio()
+
         # calculate qqS
         obj.ManipulateData(args=['q', 'q', 'S'], setname='qqS', operant='*')
 
         # perform PCA on 'qqS'
         obj.PerfPCA(setname='S')
-
-        # scale principle components
-        scale1 = np.sqrt(np.mean(obj.Sc1**2))
-        obj.ScaleData('SPC1', scale1)
-        scale2 = np.sqrt(np.mean(obj.Sc2**2))
-        obj.ScaleData('SPC2', scale2)
 
         obj.MeanVariance('S', axis=0)
 
