@@ -34,7 +34,7 @@ search_crit = root_dir + '\\**\\*.hdf5'.replace('\\\\', seperator)
 
 filter_obj = 'swell_sqiso_key'
 eva_path = root_dir +\
-    '\\data_evaluation\\script_evaluation\\PCA_on_S'.replace('\\\\', seperator)
+    '\\data_evaluation\\script_evaluation\\S_examples'.replace('\\\\', seperator)
 
 
 config = {
@@ -44,7 +44,7 @@ config = {
     'search_crit' : search_crit,
     'filter_obj' : filter_obj,
     'eva_path' : eva_path,
-    'fileformat' : '.png',
+    'fileformat' : '.svg',
     'system' : system,
 }
 
@@ -133,32 +133,28 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     
     plotaspects['Nrule'] = [100]
     plotaspects['frule'] = [1/8]
-    plotaspects['title']= r'Magnitude of PCs compared with standard deviation of $qqS$ in $q$-space'
-    plotaspects['xlabel'] = r'$q$'
-    plotaspects['ylabel'] = r'$qqS$'
+    plotaspects['title']= r'Form factor in $q$-space'
+    plotaspects['xlabel'] = r'$q$ / Å'
+    plotaspects['ylabel'] = r'$Sq^2$ / [$Sq^2$]'
     plotaspects['xdata'] = 'q'
-    plotaspects['ydata'] = [
-        'scaledSPC1', 'scaledSPC2', 'varS'
-    ]
+    plotaspects['ydata'] = ['S', 'meanS']
     plotaspects['xerr'] = '0'
     plotaspects['yerr'] = 'binerrb1'
-    plotaspects['xlim'] = [None, None]
-    plotaspects['ylim'] = [None, None]
+    plotaspects['xlim'] = [1e-2, 2e-1]
+    plotaspects['ylim'] = [1e-4, 7e-4]
     plotaspects['xscale'] = 'linear'
     plotaspects['yscale'] = 'linear'
     plotaspects['ls'] = '-'
-    plotaspects['lw'] = 1.5
+    plotaspects['lw'] = [0.25, 1.5]
     plotaspects['marker'] = 'o'
-    plotaspects['ms'] = 0.0
-    plotaspects['color'] = ['cyan', 'limegreen', 'black']
-    plotaspects['plotdomain'] = 'PCspace'
+    plotaspects['ms'] = 3.5*0
+    plotaspects['color'] = ['dodgerblue', 'black']
+    plotaspects['plotdomain'] = 'Kratky'
     plotaspects['plot'] = 'diag'
-    plotaspects['sortby'] = 'N'
-    plotaspects['legend'] = True
+    plotaspects['sortby'] = 'f'
+    plotaspects['legend'] = False
     plotaspects['legend_loc'] = 'upper left'
-    plotaspects['label'] = [
-        'scaled component 1', 'scaled component 2', r'$\sigma_{S}$',
-    ]
+    plotaspects['label'] = None
 
 
     # remove None and select relevant data objects
@@ -167,6 +163,7 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
             obj.N in plotaspects['Nrule'] and obj.f in plotaspects['frule']
         )
     ]
+
 
     for obj in DataObjs:
         # perform fit for radii of gyration
@@ -177,15 +174,16 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         # compute compactness of polymers
         obj.compactness = obj.Rg1/obj.N
 
-        obj.ConformationRatio()
+        obj.ConClassRatio()
 
         # calculate qqS
         obj.ManipulateData(args=['q', 'q', 'S'], setname='qqS', operant='*')
 
         # perform PCA on 'qqS'
+        obj.PerfPCA(setname='qqS')
         obj.PerfPCA(setname='S')
 
-        obj.MeanVariance('S', axis=0)
+        obj.MeanVariance('S', 0, True)
 
 
     evaplot = plotlib.PlotData(plotaspects, DataObjs)

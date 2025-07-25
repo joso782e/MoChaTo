@@ -102,9 +102,9 @@ class PlotRule:
         self.plotdomain = 'Kratky'
         self.plot = 'diag'
         self.sortby = 'N'
-        self.legend = True
+        self.legend = False
         self.legend_loc = 'upper right'
-        self.label = 'legend label'
+        self.label = None
 
         # update attributes with values from plotaspects and aspectvalues
         for i in plotaspects.keys():
@@ -311,13 +311,15 @@ class PlotData:
                         )
                 
                 # create label for current rule and append to labels list
-                if len(rule.ydata) > 1:
-                    lstr = f'{rule.label[i]}'
-                else:
-                    lstr = f'${rule.sortby}={round(j,2)}$'
-                labels.append([
-                    lstr for obj in self.data if getattr(obj, rule.sortby) == j
-                ])
+                if rule.label:
+                    if len(rule.ydata) > 1:
+                        lstr = f'{rule.label[i]}'
+                    else:
+                        lstr = f'${rule.sortby}={round(j,2)}$'
+                    labels.append([
+                        lstr for obj in self.data
+                        if getattr(obj, rule.sortby) == j
+                    ])
                 # append line styles, line widths, types, marker sizes and
                 # colors to corresponding lists
                 ls.append(
@@ -479,22 +481,38 @@ class PlotData:
 
                 if rule.plotdomain == 'Kratky':
                     # plot data in Kratky plot
+                    if ydata[i].ndim == xdata[i].ndim + 1:
+                        ydata[i] = np.squeeze(ydata[i])
+                        xdata[i] = np.full_like(ydata[i], xdata[i])
                     ydata[i] = ydata[i]*xdata[i]**2
-                    ax.loglog(
-                        xdata[i], ydata[i], label=labels[i]
-                    )
+                    if rule.label:
+                        ax.loglog(
+                            xdata[i], ydata[i], label=labels[i]
+                        )
+                    else:
+                        ax.loglog(xdata[i], ydata[i])
                 else:
                     # plot data in normal plot
-                    ax.plot(
-                        xdata[i], ydata[i], label=labels[i]
-                    )
+                    if rule.label:
+                        ax.plot(
+                            xdata[i], ydata[i], label=labels[i]
+                        )
+                    else:
+                        ax.plot(xdata[i], ydata[i])
                     ax.set_xscale(rule.xscale)
                     ax.set_yscale(rule.yscale)
             elif rule.plot == 'errorbar':
-                ax.errorbar(
-                    np.squeeze(xdata[i]), np.squeeze(ydata[i]),
-                    np.squeeze(yerr[i]), np.squeeze(xerr[i]), label=labels[i]
-                )
+                    if rule.label:
+                        ax.errorbar(
+                            np.squeeze(xdata[i]), np.squeeze(ydata[i]),
+                            np.squeeze(yerr[i]), np.squeeze(xerr[i]),
+                            label=labels[i]
+                        )
+                    else:
+                        ax.errorbar(
+                            np.squeeze(xdata[i]), np.squeeze(ydata[i]),
+                            np.squeeze(yerr[i]), np.squeeze(xerr[i])
+                        )
             elif rule.plot == 'hist':
                 # create bins and plot data in histogram
                 bins = np.linspace(
@@ -527,14 +545,12 @@ class PlotData:
         if rule.legend:
             ax.legend(loc=rule.legend_loc)
         
-        save_plot(
+        SavePlot(
             fig=fig, name=f'f_{[round(f,2) for f in rule.frule]}', path=figpath
         )
 
-
-
     
-def save_plot(
+def SavePlot(
         fig:plt.Figure, name:str, path:str, system:str=config['system'],
         fileformat:str=config['fileformat']
 ) -> None:

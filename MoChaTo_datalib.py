@@ -53,28 +53,9 @@ class FileData(PCA):
         S:np.ndarray,
         clmat:np.ndarray,
         sequence:np.ndarray,
-        n_components=None,
-        *,
-        copy=True,
-        whiten=False,
-        svd_solver = "auto",
-        tol=0.0,
-        iterated_power="auto",
-        n_oversamples=10,
-        power_iteration_normalizer="auto",
-        random_state=None,
+        n_components:int
     ):
-        super().__init__(
-            n_components=n_components,
-            copy=copy,
-            whiten=whiten,
-            svd_solver=svd_solver,
-            tol=tol,
-            iterated_power=iterated_power,
-            n_oversamples=n_oversamples,
-            power_iteration_normalizer=power_iteration_normalizer,
-            random_state=random_state,
-        )
+        self.pcaobj = PCA(n_components=n_components)
         self.condi = condi
         self.N = N
         self.positions = np.linspace(1, N, N)    # monomer positions in chain
@@ -155,59 +136,35 @@ class FileData(PCA):
         # set number of loops
         self.nl = [len(l) for l in self.ll]
 
-    def BalanceProfile(
-            self, sequence:str, limits:tuple[np.ndarray], name:str
-        ) -> None:
+    def LoopBalanceProfile(self) -> None:
         '''
         Function to compute a balance profile, balance and standard deviation
         for a given sequence
 
         Input:
-        sequence (dtype = str)...       str describing attribut with seuqence
-                                        data
-        limits (dtype = tuple)...       tuple containing conditions for every
-                                        sequence in "sequence"
-        name (dytep = str)...           for costumization and distiction of new
-                                        attributes
         
         Output:
         updates self with new attributes as follows:
-        - self.{name}profiles...        balance profile over sequences
-        - self.{name}balances...        normalized and centered balances of
+        - self.loopprofiles...          balance profile over sequences
+        - self.loopbalances...          normalized and centered balances of
                                         profiles
-        - self.{name}devbalances...     normalized deviation of balances
+        - self.loopdevbalances...       normalized deviation of balances
         '''
-        sequence = getattr(self, sequence)
-
-        if len(limits) == 1:
-            l1 = limits[0]
-            l2 = limits[0]
-        elif len(limits) == 2:
-            l1 = limits[0]
-            l2 = limits[1]
-        else:
-            raise ValueError(
-                'More then two conditions are not supported. Please set '
-                '"limits" to a tuple containing two lists.'
-            )
+        sequence = self.positions
+        clmat = self.clmat
         
         profiles = []
         balances = []
         devbalances = []
 
-        if sequence.ndim == 1:
-            m = len(l1)
-            n = sequence.shape[0]
-            sequence = np.full(shape=(m,n), fill_value=sequence, dtype=float)
-        elif sequence.ndim != 2:
-            raise ValueError(
-                '"sequence" does not have a supported shape. Please check if '
-                'its a 1D or 2D array.'
-            )
+        for i in range(clmat.shape[0]):
+            cls = [
+                (clmat[i,k,1], clmat[i,k,2]) for k in range(clmat.shape[1])
+                if clmat[i,k,0]
+            ]
 
-        for i in range(len(l1)):
             p, bp, devb = BalanceProfile(
-                sequence=sequence[i,:], limits=(l1[i],l2[i])
+                sequence=sequence, cls=cls
             )
 
             profiles.append(p)
@@ -218,9 +175,9 @@ class FileData(PCA):
         balances = np.stack(balances, axis=0)
         devbalances = np.stack(devbalances, axis=0)
 
-        setattr(self, f'{name}profiles', profiles)
-        setattr(self, f'{name}balances', balances)
-        setattr(self, f'{name}devbalances', devbalances)
+        setattr(self, f'loopprofiles', profiles)
+        setattr(self, f'loopbalances', balances)
+        setattr(self, f'loopdevbalances', devbalances)
 
     def Blockiness(self, blocktype:int, normalize:bool) -> None:
         '''
@@ -330,10 +287,10 @@ class FileData(PCA):
 
 
         for k in range(clmat.shape[0]):
-            i = [n for n in clmat[k,:,1] if n]
-            j = [n for n in clmat[k,:,2] if n]
-
-            cls = [(i[n], j[n]) for n in len(i)]
+            cls = [
+                (clmat[k,n,1], clmat[k,n,2]) for n in range(clmat.shape[1])
+                if clmat[k,n,0]
+            ]
 
             p1, p2, p3 = ConClassRatio(cls)
 
@@ -364,7 +321,7 @@ class FileData(PCA):
 
         
         updates self with new attributes as follows:
-        - self.m{setname}:          mean of dataset
+        - self.mean{setname}:          mean of dataset
         - self.var{setname}:        variannce of dataset
         '''
         data = getattr(self, setname)
@@ -626,12 +583,13 @@ class FileData(PCA):
         - self.{setname}PC{i} for i = 1, ..., n_components Principal components
         '''
         dataset = getattr(self, setname)
-        trafo = self.fit_transform(
+        pcaobj = self.pcaobj
+        trafo = pcaobj.fit_transform(
             dataset.T if transpose else dataset
         )
-        for i in range(self.n_components):
+        for i in range(pcaobj.n_components):
             setattr(self, f'{setname}c{i+1}', trafo[:,i])
-            setattr(self, f'{setname}PC{i+1}', self.components_[i,:])        
+            setattr(self, f'{setname}PC{i+1}', pcaobj.components_[i,:])        
         
     def PerfRecon(self, setname:str, normalize:bool=True) -> None:
         '''
@@ -875,7 +833,7 @@ def Blockiness(
 
 
 def BalanceProfile(
-        sequence:np.ndarray, limits:tuple[np.ndarray]
+        sequence:np.ndarray, cls:list[tuple]
     ) -> np.ndarray:
     '''
     Function to compute the balance profile over a sequence for a given
@@ -884,27 +842,16 @@ def BalanceProfile(
     Input:
     sequence (dtype = np.ndarray)...    sequence over which to compute the
                                         balance profile
+    cls (dtype = list)...               list of tuples containing crosslink
+                                        indices
 
     Output:
     '''
-    l = limits[0]
-    u = limits[1]
+    m = len(cls)
+    n = len(sequence)
 
-    lower = np.array([
-        l[i] if l[i] < u[i] else u[i] for i in range(len(l))
-    ])
-    upper = np.array([
-        u[i] if u[i] > l[i] else l[i] for i in range(len(u))
-    ])
-    
-    if lower.ndim != upper.ndim != 1:
-        raise ValueError(
-           f'Shapes {lower.shape} and {upper.shape} not supported for lower '
-            'and upper conditions. Set "limits" to a tuple with 2 1D arrays.'
-        )
-    
-    m = len(lower)
-    n = len(sequence)    
+    lower = [cl[0] if cl[0] < cl[1] else cl[1] for cl in cls]
+    upper = [cl[1] if cl[1] > cl[0] else cl[0] for cl in cls]
     
     profile = np.full(shape=(m,n), fill_value=sequence, dtype=float)
     lower = np.stack([lower for _ in range(n)], axis=1)
@@ -925,8 +872,6 @@ def BalanceProfile(
         )
 
         b = np.abs(2*b/n - 1)           # normalized and centered balance on
-                                        # sequence
-        devb = np.abs(2*devb/n - 1)     # normalized and centered deviation
                                         # sequence
     
     return np.squeeze(profile), float(b), float(devb)
