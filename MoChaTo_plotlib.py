@@ -127,8 +127,8 @@ class PlotData:
         ):
                 self.rule.yerr = [self.rule.yerr]
 
-        if (
-            not set(self.rule.Nrule).issubset([obj.N for obj in dataobjs]) or
+        if not (
+            set(self.rule.Nrule).issubset([obj.N for obj in dataobjs]) or
             self.rule.Nrule == 'all'
         ):
             raise ValueError(
@@ -138,8 +138,8 @@ class PlotData:
                  '\nor to "all"'
             )
         
-        if (
-            not set(self.rule.frule).issubset([obj.f for obj in dataobjs]) or
+        if not (
+            set(self.rule.frule).issubset([obj.f for obj in dataobjs]) or
             self.rule.frule == 'all'
         ):
             raise ValueError(
@@ -189,9 +189,15 @@ class PlotData:
 
         if rule.Nrule == 'all':
             rule.Nrule = np.unique([obj.N for obj in dataobjs])
+            rule.Nname = 'all'
+        else:
+            rule.Nname = rule.Nrule
 
         if rule.frule == 'all':
             rule.frule = np.unique([obj.f for obj in dataobjs])
+            rule.fname = 'all'
+        else:
+            rule.fname = [round(f,2) for f in rule.frule]
 
         data = [
             obj for obj in dataobjs
@@ -316,10 +322,10 @@ class PlotData:
                         lstr = f'{rule.label[i]}'
                     else:
                         lstr = f'${rule.sortby}={round(j,2)}$'
-                    labels.append([
+                    labels.append(np.unique([
                         lstr for obj in self.data
                         if getattr(obj, rule.sortby) == j
-                    ])
+                    ]))
                 # append line styles, line widths, types, marker sizes and
                 # colors to corresponding lists
                 ls.append(
@@ -411,7 +417,7 @@ class PlotData:
             )        
         figpath = eva_path + seperator + 'plots' + seperator +\
             rule.plot + '_' + rule.plotdomain + '_' + str(rule.ydata) +\
-            '_vs_'+ rule.xdata + seperator + f'N_{rule.Nrule}'
+            '_vs_'+ rule.xdata + seperator + f'N_{rule.Nname}'
                 
         fig = plt.figure(figsize=rule.figsize)      # create figure
         ax = fig.add_subplot(1, 1, 1)               # create subplot
@@ -437,10 +443,11 @@ class PlotData:
 
         for i in range(len(xdata)):
             # asume more data points then samples
-            if xdata[i].shape[0] < xdata[i].shape[1]:
-                xdata[i] = xdata[i].T
-                if rule.plot == 'errorbar':
-                    xerr[i] = xerr[i].T
+            if xdata[i].ndim > 1:
+                if xdata[i].shape[0] < xdata[i].shape[1]:
+                    xdata[i] = xdata[i].T
+                    if rule.plot == 'errorbar':
+                        xerr[i] = xerr[i].T
             # check if one axis lenght of ydata[i] matches length of axis 0 in
             # xdata[i], if not raise ValueError
             if xdata[i].shape[0] != ydata[i].shape[0]:
@@ -544,9 +551,21 @@ class PlotData:
             
         if rule.legend:
             ax.legend(loc=rule.legend_loc)
+            # remove duplicate legend entries
+            # get legend handles and labels, create dictionary and replot
+            # legend
+            # source: (
+            #   https://stackoverflow.com/questions/13588920/
+            #   stop-matplotlib-repeating-labels-in-legend
+            # )
+            handles, labels = plt.gca().get_legend_handles_labels()
+            labeldict= dict(zip(labels, handles))
+            ax.legend(
+                labeldict.values(), labeldict.keys(), loc=rule.legend_loc
+            )
         
         SavePlot(
-            fig=fig, name=f'f_{[round(f,2) for f in rule.frule]}', path=figpath
+            fig=fig, name=f'f_{rule.fname}', path=figpath
         )
 
     

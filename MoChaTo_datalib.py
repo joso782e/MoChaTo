@@ -612,6 +612,9 @@ class FileData(PCA):
         - self.{setname}mrevar:         variance of relative mean
                                         reconstruction error
         '''
+        # get number of components from PCA object
+        ncomps = self.pcaobj.n_components
+
         # get data and mean of data
         data = getattr(self, setname)
         mdata = np.mean(data, axis=0)
@@ -620,13 +623,13 @@ class FileData(PCA):
         PCspace = np.stack(
             [
                 getattr(self, f'{setname}c{i+1}')
-                for i in range(self.n_components)
+                for i in range(ncomps)
             ], axis=1
         )
         PC = np.stack(
             [
                 getattr(self, f'{setname}PC{i+1}')
-                for i in range(self.n_components)
+                for i in range(ncomps)
             ], axis=0
         )
         recon = np.matmul(PCspace, PC) + mdata
@@ -1045,6 +1048,8 @@ def ConClassRatio(cls:list[tuple]) -> tuple[float,float,float]:
     '''
     L = len(cls)
     C = L*(L - 1)/2
+    if C == 0:
+        return 0, 0, 0
     loopcon = np.zeros((L, L), dtype=int)
 
     for ind, _ in np.ndenumerate(loopcon):

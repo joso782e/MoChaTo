@@ -131,38 +131,50 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     # legend_loc:   - str disribing the legends location in the plot
     # label:        - str for what to use in labeling data sets: either N or f
     
+    plotaspects['figsize'] = (6,4)
     plotaspects['Nrule'] = [100]
     plotaspects['frule'] = [1/8]
-    plotaspects['title']= r'Form factor in $q$-space'
+    plotaspects['title']= r'Form factor $q$-space'
     plotaspects['xlabel'] = r'$q$ / Å'
     plotaspects['ylabel'] = r'$Sq^2$ / [$Sq^2$]'
     plotaspects['xdata'] = 'q'
     plotaspects['ydata'] = ['S', 'meanS']
     plotaspects['xerr'] = '0'
     plotaspects['yerr'] = 'binerrb1'
-    plotaspects['xlim'] = [1e-2, 2e-1]
-    plotaspects['ylim'] = [1e-4, 7e-4]
+    plotaspects['xlim'] = [1e-2, 3e-1]
+    plotaspects['ylim'] = [1e-4, 6.5e-4]
     plotaspects['xscale'] = 'linear'
     plotaspects['yscale'] = 'linear'
     plotaspects['ls'] = '-'
-    plotaspects['lw'] = [0.25, 1.5]
+    plotaspects['lw'] = 1.0
     plotaspects['marker'] = 'o'
-    plotaspects['ms'] = 3.5*0
+    plotaspects['ms'] = 2.5*0
     plotaspects['color'] = ['dodgerblue', 'black']
     plotaspects['plotdomain'] = 'Kratky'
     plotaspects['plot'] = 'diag'
     plotaspects['sortby'] = 'f'
     plotaspects['legend'] = False
     plotaspects['legend_loc'] = 'upper left'
-    plotaspects['label'] = None
+    plotaspects['label'] = False
 
 
     # remove None and select relevant data objects
-    DataObjs = [
-        obj for obj in DataObjs if obj and (
-            obj.N in plotaspects['Nrule'] and obj.f in plotaspects['frule']
-        )
-    ]
+    if type(plotaspects['Nrule']) is list and type(plotaspects['frule']) is list:
+        DataObjs = [
+            obj for obj in DataObjs if obj and (
+                obj.N in plotaspects['Nrule'] and obj.f in plotaspects['frule']
+            )
+        ]
+    elif type(plotaspects['Nrule']) is list:
+        DataObjs = [
+            obj for obj in DataObjs if obj and obj.N in plotaspects['Nrule']
+        ]
+    elif type(plotaspects['frule']) is list:
+        DataObjs = [
+            obj for obj in DataObjs if obj and obj.f in plotaspects['frule']
+        ]
+    else:
+        DataObjs = [obj for obj in DataObjs if obj]
 
 
     for obj in DataObjs:
@@ -183,7 +195,14 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         obj.PerfPCA(setname='qqS')
         obj.PerfPCA(setname='S')
 
-        obj.MeanVariance('S', 0, True)
+        c1 = np.sqrt(np.mean(obj.Sc1**2))
+        obj.ScaleData('SPC1', c1)
+        c2 = np.sqrt(np.mean(obj.Sc2**2))
+        obj.ScaleData('SPC2', c2)
+
+        obj.PerfRecon('qqS')
+
+        obj.MeanVariance('S', 0, False)
 
 
     evaplot = plotlib.PlotData(plotaspects, DataObjs)
