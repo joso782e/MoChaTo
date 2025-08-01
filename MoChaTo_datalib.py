@@ -652,18 +652,11 @@ class FileData(PCA):
         # variance of error
         mrevar = np.mean(revar)
 
-        setattr(self, f'{setname}recondata', recon)
-        setattr(self, f'{setname}re', re)
-        setattr(self, f'{setname}mre', mre)
-        setattr(self, f'{setname}revar', revar)
-        setattr(self, f'{setname}mrevar', mrevar)
-
-
-        self.reconS = recon         # set reconstructed data
-        self.re = re                # set relative reconstruction error
-        self.mre = mre              # set relative mean reconstruction error
-        self.revar = revar          # set variance of relative error
-        self.mrevar = mrevar        # set variance of relative mean error
+        setattr(self, f'recondata{setname}', recon)
+        setattr(self, f're{setname}', re)
+        setattr(self, f'mre{setname}', mre)
+        setattr(self, f'revar{setname}', revar)
+        setattr(self, f'mrevar{setname}', mrevar)
     
     def PerfFit(
             self, FitFunc, xdata:str, ydata:str, fitname:str,

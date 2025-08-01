@@ -5,6 +5,8 @@ MoChaTo: Library for plotting evaluation  data of SCNPs
 -------------------------------------------------------------------------------
 written by Jonas Soucek, 2025
 at TU Dresden and Leibniz Institute of Polymer Research
+
+Library of support classes and functions mainly for plotting data
 '''
 
 
@@ -16,6 +18,7 @@ sys.path.append(os.path.dirname(__file__))
 import MoChaTo_datalib as datalib
 import numpy as np
 import matplotlib.pyplot as plt
+import networkx as nx
 
 
 with open('.\\data_evaluation\\Scripts\\config.json', 'r') as configf:
@@ -486,11 +489,13 @@ class PlotData:
                 ax.set_xlim(left=xlow, right=xup, auto=xauto)
                 ax.set_ylim(bottom=ylow, top=yup, auto=yauto)
 
+                # make xdata and ydata plot compattible
+                if ydata[i].ndim == xdata[i].ndim + 1:
+                    ydata[i] = np.squeeze(ydata[i])
+                    xdata[i] = np.full_like(ydata[i], xdata[i])
+
                 if rule.plotdomain == 'Kratky':
                     # plot data in Kratky plot
-                    if ydata[i].ndim == xdata[i].ndim + 1:
-                        ydata[i] = np.squeeze(ydata[i])
-                        xdata[i] = np.full_like(ydata[i], xdata[i])
                     ydata[i] = ydata[i]*xdata[i]**2
                     if rule.label:
                         ax.loglog(
@@ -567,6 +572,173 @@ class PlotData:
         SavePlot(
             fig=fig, name=f'f_{rule.fname}', path=figpath
         )
+
+
+def SCNPFilter(
+        dataobj:datalib.FileData, N:int, constrains:dict, condition:list[str]
+    ) -> np.ndarray:
+    '''
+    Function to filter SCNP data objects
+
+    Input:
+    dataobj (dtype = datalib.FileData)...   FileData object with SCNP data
+    N (dtype = int)...                      number of SCNPs to check
+    constrains (dtype = dict)...            dictionary with constrains for
+                                            filtering dataobj, keys are
+                                            attributes of FileData object,
+                                            must match length of condition
+    condition (dtype = list[str])...        condition if value in constrain
+                                            category of SCNP should be 'less',
+                                            'equal' or 'greater' then the
+                                            constrains value,
+                                            must match length of constrains
+
+    Output:
+    idx (dtype = np.ndarray)...             boolean array with True for
+                                            values that match the constrains
+                                            and condition, False otherwise
+    '''
+    conskey = list(constrains.keys())    # get keys of constrains dict
+
+    if len(conskey) != len(condition):
+        if len(condition) == 1:
+            condition = [condition[0]] * len(conskey)
+            print(condition)
+        else:
+            raise ValueError(
+                'Length of constrains and condition must match. '
+                f'Length of constrains: {len(conskey)}, '
+                f'length of condition: {len(condition)}'
+            )
+    
+    idx = np.full(N, 0)
+    for i in range(len(conskey)):
+        param = getattr(dataobj, conskey[i])  # get parameter from dataobj
+        if condition[i] == 'less':
+            # check if parameter is less then constrains value
+            idx += param < constrains[conskey[i]]
+        elif condition[i] == 'equal':
+            # check if parameter is equal to constrains value
+            idx += param == constrains[conskey[i]]
+        elif condition[i] == 'greater':
+            # check if parameter is greater then constrains value
+            idx += param > constrains[conskey[i]]
+        else:
+            raise ValueError(
+                f'Condition "{condition[i]}" not supported. '
+                'Please use "less", "equal" or "greater".'
+            )
+
+    # return boolean array with True for values that match all condition
+    return idx == len(conskey)
+
+
+class PlotSCNP:
+    '''
+    Class to plot a graph modeling the cross-linked conformation of a SCNP in
+    2D
+    '''
+
+    def __init__(
+        self, name:str, sequence:np.ndarray, crosslinks:np.ndarray, path:str
+    ):
+        '''
+        Constructor for PlotSCNP class
+
+        Input:
+        sequence (dtype = nd.ndarray)...    1D-array object with SCNP
+                                            data
+        crosslinks (dtype = nd.ndarray)...  2D-array with crosslinks
+        '''
+        self.name = name
+        self.sequence = sequence
+        self.crosslinks = crosslinks
+        self.path = path
+        self.fig = plt.figure(figsize=(6, 6))
+        self.ax = self.fig.add_subplot(1, 1, 1)
+
+    def ConstructGraph(self) -> None:
+        '''
+        
+        '''
+        seq = self.sequence
+        cl = self.crosslinks
+
+        if cl.ndim != 2:
+            raise ValueError(
+                'Crosslinks must be a 2D-array with shape (2, n) or (n, 2), '
+                f'got {cl.shape} instead.'
+            )
+        
+        if cl.shape[0] != 2:
+            cl = cl.T
+
+        self.G = nx.Graph()                 # create empty graph object
+        spec = ['r', 'b', 'a']
+        color = ['orangered', 'black', 'limegreen']
+
+        nodes = [(i, {'color': color[seq[i]-2]}) for i in range(len(seq))]
+        edges = [
+            (i, i+1, {'color': 'black', 'ls': '-'}) for i in range(len(seq)-1)
+        ]
+        edges += [
+            (cl[0, i], cl[1, i], {'color': 'cyan', 'ls': '--'})
+            for i in range(cl.shape[1]) if (cl[0, i] and cl[1, i])
+        ]
+
+        self.labels = {
+            i: f'{spec[seq[i]-2]}' for i in range(len(seq))
+        }
+
+        self.G.add_nodes_from(nodes)
+        self.G.add_edges_from(edges)
+
+    def DrawGraph(self):
+        '''
+
+        '''
+        if not hasattr(self, 'G'):
+            self.ConstructGraph()
+        
+        node_color = [self.G.nodes[i]['color'] for i in self.G.nodes]
+        edge_color = [self.G[i][j]['color'] for (i,j) in self.G.edges]
+        edge_ls = [self.G[i][j]['ls'] for (i,j) in self.G.edges]
+        
+        pos = nx.kamada_kawai_layout(self.G)
+        nx.draw(
+            self.G, pos, ax=self.ax, labels=self.labels, node_size=7,
+            node_color=node_color, edge_color=edge_color, style=edge_ls,
+            with_labels=False
+        )
+        self.ax.legend(
+            handles=[
+                plt.Line2D(
+                    [0], [0], marker='o', color='w',
+                    markerfacecolor='orangered', markersize=7,
+                    label='reactive bead'
+                ),
+                plt.Line2D(
+                    [0], [0], marker='o', color='w',
+                    markerfacecolor='black', markersize=7,
+                    label='backbone bead'
+                ),
+                plt.Line2D(
+                    [0], [0], marker='o', color='w',
+                    markerfacecolor='limegreen', markersize=7,
+                    label='activated bead'
+                ),
+                plt.Line2D(
+                    [0], [0], color='cyan', lw=1, ls='--',
+                    label='crosslink'
+                ),
+                plt.Line2D(
+                    [0], [0], color='black', lw=1, label='single-chain bond'
+                )
+            ]
+        )
+
+        SavePlot(
+            fig=self.fig, name=self.name, path=self.path)
 
     
 def SavePlot(

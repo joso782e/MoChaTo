@@ -34,7 +34,7 @@ search_crit = root_dir + '\\**\\*.hdf5'.replace('\\\\', seperator)
 
 filter_obj = 'swell_sqiso_key'
 eva_path = root_dir +\
-    '\\data_evaluation\\script_evaluation\\S_examples'.replace('\\\\', seperator)
+    '\\data_evaluation\\script_evaluation\\PCA_on_qqS'.replace('\\\\', seperator)
 
 
 config = {
@@ -72,6 +72,7 @@ import MoChaTo_plotlib as plotlib
 import glob
 import h5py
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 # print statement if the script is executed
@@ -134,25 +135,25 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['figsize'] = (6,4)
     plotaspects['Nrule'] = [100]
     plotaspects['frule'] = [1/8]
-    plotaspects['title']= r'Form factor $q$-space'
-    plotaspects['xlabel'] = r'$q$ / Å'
-    plotaspects['ylabel'] = r'$Sq^2$ / [$Sq^2$]'
-    plotaspects['xdata'] = 'q'
-    plotaspects['ydata'] = ['S', 'meanS']
+    plotaspects['title']= r'Cluster plot for PCA on Kratky form factor'
+    plotaspects['xlabel'] = r'$c_1\cdot 10^3$ / [$c_1$]'
+    plotaspects['ylabel'] = r'$c_2\cdot 10^3$ / [$c_2$]'
+    plotaspects['xdata'] = 'scaledqqSc1'
+    plotaspects['ydata'] = 'scaledqqSc2'
     plotaspects['xerr'] = '0'
     plotaspects['yerr'] = 'binerrb1'
-    plotaspects['xlim'] = [1e-2, 3e-1]
-    plotaspects['ylim'] = [1e-4, 6.5e-4]
+    plotaspects['xlim'] = [None, None]
+    plotaspects['ylim'] = [None, None]
     plotaspects['xscale'] = 'linear'
     plotaspects['yscale'] = 'linear'
-    plotaspects['ls'] = '-'
+    plotaspects['ls'] = 'None'
     plotaspects['lw'] = 1.0
     plotaspects['marker'] = 'o'
-    plotaspects['ms'] = 2.5*0
-    plotaspects['color'] = ['dodgerblue', 'black']
-    plotaspects['plotdomain'] = 'Kratky'
+    plotaspects['ms'] = 2.5
+    plotaspects['color'] = ['dodgerblue']
+    plotaspects['plotdomain'] = 'PCspace'
     plotaspects['plot'] = 'diag'
-    plotaspects['sortby'] = 'f'
+    plotaspects['sortby'] = 'N'
     plotaspects['legend'] = False
     plotaspects['legend_loc'] = 'upper left'
     plotaspects['label'] = False
@@ -193,16 +194,99 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
 
         # perform PCA on 'qqS'
         obj.PerfPCA(setname='qqS')
+        obj.PerfRecon('qqS', normalize=True)
+        obj.MeanVariance('qqS', 0, False)
+        obj.ScaleData('qqSc1', 1000)
+        obj.ScaleData('qqSc2', 1000)
+
+        
         obj.PerfPCA(setname='S')
+        obj.PerfRecon('S', normalize=True)
+        obj.MeanVariance('S', 0, False)
 
         c1 = np.sqrt(np.mean(obj.Sc1**2))
         obj.ScaleData('SPC1', c1)
         c2 = np.sqrt(np.mean(obj.Sc2**2))
         obj.ScaleData('SPC2', c2)
 
-        obj.PerfRecon('qqS')
 
-        obj.MeanVariance('S', 0, False)
+        SCNPpath = root_dir +\
+            f'\\data_evaluation\\script_evaluation\\examples\\SCNP_graphs\\N_[{obj.N}]\\f_[{obj.f}]'.replace('\\\\', seperator)
+
+        idx = plotlib.SCNPFilter(
+            dataobj=obj, N=500, constrains={'qqSc1': np.max(obj.qqSc1)},
+            condition=['equal']
+        )
+
+        outlierseq = obj.sequence[idx,:]
+        outliercl1 = obj.clmat[idx,:,1]
+        outliercl2 = obj.clmat[idx,:,2]
+        outliername = [
+            f'c1_{round(obj.qqSc1[i], 5)}'
+            for i in range(len(idx)) if idx[i]
+        ]
+
+        for i in range(len(outliername)):
+            outliercl = np.stack(
+                [outliercl1[i,:], outliercl2[i,:]], axis=1
+            )
+            scnp = plotlib.PlotSCNP(
+                name=outliername[i], sequence=outlierseq[i,:],
+                crosslinks=outliercl,
+                path=SCNPpath
+            )
+            scnp.DrawGraph()
+
+        
+        idx = plotlib.SCNPFilter(
+            dataobj=obj, N=500, constrains={'qqSc2': 0.48e-3},
+            condition=['greater']
+        )
+
+        outlierseq = obj.sequence[idx,:]
+        outliercl1 = obj.clmat[idx,:,1]
+        outliercl2 = obj.clmat[idx,:,2]
+        outliername = [
+            f'c2_{round(obj.qqSc2[i], 5)}' 
+            for i in range(len(idx)) if idx[i]
+        ]
+
+        for i in range(len(outliername)):
+            outliercl = np.stack(
+                [outliercl1[i,:], outliercl2[i,:]], axis=1
+            )
+            scnp = plotlib.PlotSCNP(
+                name=outliername[i], sequence=outlierseq[i,:],
+                crosslinks=outliercl,
+                path=SCNPpath
+            )
+            scnp.DrawGraph()
+        
+
+        idx = plotlib.SCNPFilter(
+            dataobj=obj, N=500,
+            constrains={'qqSc1': 0.75e-3, 'qqSc2': 0.35e-3},
+            condition=['greater']
+        )
+
+        outlierseq = obj.sequence[idx,:]
+        outliercl1 = obj.clmat[idx,:,1]
+        outliercl2 = obj.clmat[idx,:,2]
+        outliername = [
+            f'c1_{round(obj.qqSc1[i], 5)}_c2_{round(obj.qqSc2[i], 5)}' 
+            for i in range(len(idx)) if idx[i]
+        ]
+
+        for i in range(len(outliername)):
+            outliercl = np.stack(
+                [outliercl1[i,:], outliercl2[i,:]], axis=1
+            )
+            scnp = plotlib.PlotSCNP(
+                name=outliername[i], sequence=outlierseq[i,:],
+                crosslinks=outliercl,
+                path=SCNPpath
+            )
+            scnp.DrawGraph()
 
 
     evaplot = plotlib.PlotData(plotaspects, DataObjs)
