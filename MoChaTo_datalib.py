@@ -132,9 +132,9 @@ class FileData(PCA):
         # set loop length
         self.ll = [l[np.nonzero(l)] for l in ll]
         # set mean loop length
-        self.mll = ([np.mean(l) if len(l) > 0 else 0 for l in self.ll])
+        self.mll = np.asarray([np.mean(l) if len(l) > 0 else 0 for l in ll])
         # set number of loops
-        self.nl = [len(l) for l in self.ll]
+        self.nl = np.asarray([len(l) for l in self.ll])
 
     def LoopBalanceProfile(self) -> None:
         '''
@@ -177,7 +177,7 @@ class FileData(PCA):
 
         setattr(self, f'loopprofiles', profiles)
         setattr(self, f'loopbalances', balances)
-        setattr(self, f'loopdevbalances', devbalances)
+        setattr(self, f'loopdev', devbalances)
 
     def Blockiness(self, blocktype:int, normalize:bool) -> None:
         '''
@@ -190,6 +190,7 @@ class FileData(PCA):
                                         2 for reactive blockiness
                                         3 for crosslinker/backbone blockiness
                                         4 for activeted blockiness
+                                        5 for total blockiness
         normalize (dtype = bool)...     wether blockiness should be normalized
                                         (True) or not (False)
         
@@ -230,7 +231,7 @@ class FileData(PCA):
         self.rouse = rouse
         return rouse
     
-    def Ideality(self) -> NDArray:
+    def SwellingRatio(self) -> NDArray:
         '''
         Function to compute swelling ratio or chain ideality
 
@@ -238,7 +239,7 @@ class FileData(PCA):
 
         Output:
         updates self with new attributes as follows:
-        - slef.ideality...          swelling ratio/ideality degree of SCNPs
+        - self.swellingratio...         swelling ratio/ideality degree of SCNPs
         '''
         if not hasattr(self, 'Rg1'):
             def FitGyraRad(x, a0, a1):
@@ -257,19 +258,25 @@ class FileData(PCA):
 
         if not hasattr(self, 'rouseeigv'):
             self.SolveEigenProblem(matrices='rouse')
+
+        l = 2.734*5.19
         
-        ideality = [
-            self.Rg1[i]*self.N**(0.5)/np.sqrt(np.sum(1/self.rouseeigv[i]))
+        Q = [
+            (self.Rg1[i]*self.N**0.5/l/(np.sum(1/self.rouseeigv[i]))**0.5)**3
             for i in range(len(self.rouseeigv))
         ]
 
-        setattr(self, 'ideality', ideality)
-        return ideality
+        setattr(self, 'swellingratio', Q)
+        return Q
     
     def ConClassRatio(self) -> tuple[list,list,list]:
         '''
         Function to compute the conformation class ratios by the type 1 loop
         conformation convention for several molecules
+        conformation class:
+        - 1: loops in series
+        - 2: loops entangled
+        - 3: loops parallel
 
         Input:
 
@@ -303,7 +310,6 @@ class FileData(PCA):
         self.conratio3 = conratio3
 
         return conratio1, conratio2, conratio3
-
 
     def MeanVariance(
         self, setname:str, axis:int, normalizedvar:bool=False
@@ -502,7 +508,7 @@ class FileData(PCA):
         return det
 
     def BinData(
-            self, xdata:str, ydata:str, bins:np.ndarray=20,
+            self, xdata:str, ydata:str, bins:np.ndarray=20, ppb:bool=False,
             xlower:float=None, xupper:float=None
     ) -> None:
         '''
@@ -518,40 +524,75 @@ class FileData(PCA):
                                         - if int: sets number of evenly spaced
                                         bins
                                         - if array-like: sets bin edges
+        ppb (dtype = bool)...           if True, computes bins so that equal
+                                        number of data points per bin
+                                        using bins as integer
 
         Output:
         updates self with new attributes as follows:
         - self.binmean{xdata}...
         - self.binmean{ydata}...
+        - self.binerr{xdata}...
         - self.binerr{ydata}...
+        - self.binmeanerr{xdata}...
+        - self.binmeanerr{ydata}...
         '''
-        xvalues = getattr(self, xdata)
-        yvalues = getattr(self, ydata)
-
-        xmin = xlower if xlower else np.min(xvalues)
-        xmax = xupper if xupper else np.max(xvalues)
-
-        if isinstance(bins, int):
-            bins = np.linspace(xmin, xmax, bins+1)
-
-        setattr(self, f'binmean{xdata}', (bins[:-1] + bins[1:])/2)
+        xvalues = np.asarray(getattr(self, xdata))
+        yvalues = np.asarray(getattr(self, ydata))
         
+        diff = np.max(xvalues) - np.min(xvalues)
+
+        xmin = xlower if xlower else np.min(xvalues) - 0.001*diff
+        xmax = xupper if xupper else np.max(xvalues) + 0.001*diff
+
+        if ppb:
+            if not isinstance(bins, int):
+                raise TypeError(
+                    'If ppb is True, bins must be an integer specifying the '
+                    'number of data points per bin.'
+                )
+            sort = np.argsort(xvalues)
+            sort = xvalues[sort]
+            bins = sort[::bins]
+        else:
+            if isinstance(bins, int):
+                bins = np.linspace(xmin, xmax, bins+1)
+
+        bins[0] = xmin
+        bins[-1] = xmax
+
         y = np.zeros_like(bins[1:])
         yerr = np.zeros_like(bins[1:])
+        xerr = np.zeros_like(bins[1:])
+        xmeanerr = np.zeros_like(bins[1:])
+        ymeanerr = np.zeros_like(bins[1:])
 
         for i in range(len(bins[1:])):
             binned = yvalues[xvalues >= bins[i]]
             buffer = xvalues[xvalues >= bins[i]]
             binned = binned[buffer <= bins[i+1]]
+            buffer = buffer[buffer <= bins[i+1]]
             if len(binned):
                 y[i] = np.mean(binned)
-                yerr[i] = np.sqrt(np.var(binned))
-            else:
-                y[i] = 0
-                yerr[i] = 0
+                if len(binned) >= 10:
+                    yerr[i] = np.sqrt(np.var(binned, ddof=1))
+                    xerr[i] = np.sqrt(np.var(buffer, ddof=1))
+                else:
+                    yerr[i] = (max(binned) - min(binned))/2
+                    xerr[i] = (max(buffer) - min(buffer))/2
+                ymeanerr[i] = yerr[i]/np.sqrt(len(binned))
+                xmeanerr[i] = xerr[i]/np.sqrt(len(binned))
+            
+        idx0 = np.nonzero(y)
+        bins = (bins[1:] + bins[:-1])/2
         
-        setattr(self, f'binmean{ydata}', y)
-        setattr(self, f'binerr{ydata}', yerr)
+        
+        setattr(self, f'binmean{xdata}', bins[idx0])
+        setattr(self, f'binmean{ydata}', y[idx0])
+        setattr(self, f'binerr{xdata}', xerr[idx0])
+        setattr(self, f'binerr{ydata}', yerr[idx0])
+        setattr(self, f'binmeanerr{xdata}', xmeanerr[idx0])
+        setattr(self, f'binmeanerr{ydata}', ymeanerr[idx0])
 
     def ScaleData(self, setname:str, scalfac:NDArray[np.float64]):
         '''
@@ -603,13 +644,13 @@ class FileData(PCA):
 
         Output:
         updates self with new attributes as follows:
-        - self.{setname}recondata:      reconstructed data
-        - self.{setname}re:             relative reconstruction error in
+        - self.recondata{setname}:      reconstructed data
+        - self.re{setname}:             relative reconstruction error in
                                         q-space
-        - self.{setname}mre:            relative mean reconstruction error
-        - self.{setname}revar:          variance of relative reconstruction
+        - self.mre{setname}:            relative mean reconstruction error
+        - self.revar{setname}:          variance of relative reconstruction
                                         error in q-space
-        - self.{setname}mrevar:         variance of relative mean
+        - self.mrevar{setname}:         variance of relative mean
                                         reconstruction error
         '''
         # get number of components from PCA object
@@ -798,6 +839,7 @@ def Blockiness(
                                         2 for reactive blockiness
                                         3 for crosslinker blockiness
                                         4 for activeted blockiness
+                                        5 for total blockiness
     normalize (dtype = bool)...         wether blockiness should be normalized
                                         (True) or nor (False)
 
@@ -806,18 +848,24 @@ def Blockiness(
                                         normalized to sequence length
     '''
     # create boolean sequence depending on blocktype
-    if blocktype > 1:
+    if blocktype > 4:
+        f = 2*f
+        bmin = np.abs(2*(f - 0.5))
+        v = sequence[:-1] == sequence[1:]
+    elif blocktype > 1:
         if blocktype == 3:
             f = 2*f
         sequence = sequence == blocktype
         bmin = np.abs(2*(f - 0.5))
+        v = sequence[:-1] == sequence[1:]
     else:
         sequence = np.array([s for s in sequence if s != 3])
         sequence = sequence == 2
         bmin = 0
+        v = sequence[:-1] == sequence[1:]
+
 
     # apply binding tensor on boolean sequence
-    v = sequence[:-1] == sequence[1:]
     b = (1 + np.sum(v))/len(sequence)
 
     if normalize:
@@ -864,13 +912,13 @@ def BalanceProfile(
     else:
         b = np.sum(np.multiply(profile, sequence))/np.sum(profile)
         devb = np.sqrt(
-            np.sum((np.multiply(profile, sequence) - b)**2)/np.sum(profile)**2
-        )
+            np.sum((np.multiply(profile, sequence)/np.sum(profile) - b)**2)
+        )/n
 
         b = np.abs(2*b/n - 1)           # normalized and centered balance on
                                         # sequence
     
-    return np.squeeze(profile), float(b), float(devb)
+    return np.squeeze(profile), float(b), float(devb/n)
 
 
 def Extrema(
@@ -1029,6 +1077,10 @@ def ConClassRatio(cls:list[tuple]) -> tuple[float,float,float]:
     Function to compute the conformation class ratios by the type 1 loop
     conformation convention, further explanations can be found in the Bachelor
     thesis
+    conformation class:
+        - 1: loops in series
+        - 2: loops entangled
+        - 3: loops parallel
 
     Input:
     cls (dtype = list[tuple])...    list of tuples, each tuple contains the

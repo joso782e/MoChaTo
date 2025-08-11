@@ -135,13 +135,11 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['figsize'] = (6,4)
     plotaspects['Nrule'] = [100]
     plotaspects['frule'] = [1/8]
-    plotaspects['title']= r'Cluster plot for PCA on Kratky form factor'
-    plotaspects['xlabel'] = r'$c_1\cdot 10^3$ / [$c_1$]'
-    plotaspects['ylabel'] = r'$c_2\cdot 10^3$ / [$c_2$]'
-    plotaspects['xdata'] = 'scaledqqSc1'
-    plotaspects['ydata'] = 'scaledqqSc2'
-    plotaspects['xerr'] = '0'
-    plotaspects['yerr'] = 'binerrb1'
+    plotaspects['title']= r'Mean loop length binned over $c_2$'
+    plotaspects['xlabel'] = r'$c_2\cdot 10^3$'
+    plotaspects['ylabel'] = r'$\iota$'
+    plotaspects['xdata'] = 'qqSc2'
+    plotaspects['ydata'] = 'mll'
     plotaspects['xlim'] = [None, None]
     plotaspects['ylim'] = [None, None]
     plotaspects['xscale'] = 'linear'
@@ -149,14 +147,15 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['ls'] = 'None'
     plotaspects['lw'] = 1.0
     plotaspects['marker'] = 'o'
-    plotaspects['ms'] = 2.5
-    plotaspects['color'] = ['dodgerblue']
+    plotaspects['ms'] = 3.5
+    plotaspects['color'] = 'dodgerblue'
     plotaspects['plotdomain'] = 'PCspace'
-    plotaspects['plot'] = 'diag'
+    plotaspects['plot'] = 'errorbar'
     plotaspects['sortby'] = 'N'
     plotaspects['legend'] = False
     plotaspects['legend_loc'] = 'upper left'
     plotaspects['label'] = False
+    plotaspects['binnum'] = 50
 
 
     # remove None and select relevant data objects
@@ -187,111 +186,55 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         # compute compactness of polymers
         obj.compactness = obj.Rg1/obj.N
 
+        obj.SwellingRatio()
+
+        obj.LoopBalanceProfile()
+
         obj.ConClassRatio()
+
+        obj.LLCalc()
+
+        obj.idealR = np.sqrt(np.array([
+            np.sum(1/obj.rouseeigv[i])/obj.N for i in range(len(obj.rouseeigv))
+        ]))
 
         # calculate qqS
         obj.ManipulateData(args=['q', 'q', 'S'], setname='qqS', operant='*')
 
         # perform PCA on 'qqS'
         obj.PerfPCA(setname='qqS')
-        obj.PerfRecon('qqS', normalize=True)
-        obj.MeanVariance('qqS', 0, False)
-        obj.ScaleData('qqSc1', 1000)
-        obj.ScaleData('qqSc2', 1000)
+        obj.LoopBalanceProfile()
+        obj.ScaleData(setname=f'{plotaspects['xdata']}', scalfac=1000)
+        if plotaspects['plot'] == 'errorbar':
+            obj.BinData(
+                xdata=f'scaled{plotaspects['xdata']}',
+                ydata=f'{plotaspects['ydata']}', bins=20, ppb=False
+            )
 
+            x1 = getattr(obj, f'binmeanscaled{plotaspects['xdata']}') + getattr(obj, f'binerrscaled{plotaspects['xdata']}')
+            x2 = getattr(obj, f'binmeanscaled{plotaspects['xdata']}') - getattr(obj, f'binerrscaled{plotaspects['xdata']}')
+            fillx = np.concatenate([x1,x2])
+            fillx = np.sort(fillx)
+            uppery = getattr(obj, f'binmean{plotaspects['ydata']}') + getattr(obj, f'binerr{plotaspects['ydata']}')
+            uppery = np.repeat(uppery, 2)
+            lowery = getattr(obj, f'binmean{plotaspects['ydata']}') - getattr(obj, f'binerr{plotaspects['ydata']}')
+            lowery = np.repeat(lowery, 2)
         
-        obj.PerfPCA(setname='S')
-        obj.PerfRecon('S', normalize=True)
-        obj.MeanVariance('S', 0, False)
-
-        c1 = np.sqrt(np.mean(obj.Sc1**2))
-        obj.ScaleData('SPC1', c1)
-        c2 = np.sqrt(np.mean(obj.Sc2**2))
-        obj.ScaleData('SPC2', c2)
-
-
-        SCNPpath = root_dir +\
-            f'\\data_evaluation\\script_evaluation\\examples\\SCNP_graphs\\N_[{obj.N}]\\f_[{obj.f}]'.replace('\\\\', seperator)
-
-        idx = plotlib.SCNPFilter(
-            dataobj=obj, N=500, constrains={'qqSc1': np.max(obj.qqSc1)},
-            condition=['equal']
-        )
-
-        outlierseq = obj.sequence[idx,:]
-        outliercl1 = obj.clmat[idx,:,1]
-        outliercl2 = obj.clmat[idx,:,2]
-        outliername = [
-            f'c1_{round(obj.qqSc1[i], 5)}'
-            for i in range(len(idx)) if idx[i]
-        ]
-
-        for i in range(len(outliername)):
-            outliercl = np.stack(
-                [outliercl1[i,:], outliercl2[i,:]], axis=1
-            )
-            scnp = plotlib.PlotSCNP(
-                name=outliername[i], sequence=outlierseq[i,:],
-                crosslinks=outliercl,
-                path=SCNPpath
-            )
-            scnp.DrawGraph()
-
         
-        idx = plotlib.SCNPFilter(
-            dataobj=obj, N=500, constrains={'qqSc2': 0.48e-3},
-            condition=['greater']
-        )
-
-        outlierseq = obj.sequence[idx,:]
-        outliercl1 = obj.clmat[idx,:,1]
-        outliercl2 = obj.clmat[idx,:,2]
-        outliername = [
-            f'c2_{round(obj.qqSc2[i], 5)}' 
-            for i in range(len(idx)) if idx[i]
-        ]
-
-        for i in range(len(outliername)):
-            outliercl = np.stack(
-                [outliercl1[i,:], outliercl2[i,:]], axis=1
-            )
-            scnp = plotlib.PlotSCNP(
-                name=outliername[i], sequence=outlierseq[i,:],
-                crosslinks=outliercl,
-                path=SCNPpath
-            )
-            scnp.DrawGraph()
-        
-
-        idx = plotlib.SCNPFilter(
-            dataobj=obj, N=500,
-            constrains={'qqSc1': 0.75e-3, 'qqSc2': 0.35e-3},
-            condition=['greater']
-        )
-
-        outlierseq = obj.sequence[idx,:]
-        outliercl1 = obj.clmat[idx,:,1]
-        outliercl2 = obj.clmat[idx,:,2]
-        outliername = [
-            f'c1_{round(obj.qqSc1[i], 5)}_c2_{round(obj.qqSc2[i], 5)}' 
-            for i in range(len(idx)) if idx[i]
-        ]
-
-        for i in range(len(outliername)):
-            outliercl = np.stack(
-                [outliercl1[i,:], outliercl2[i,:]], axis=1
-            )
-            scnp = plotlib.PlotSCNP(
-                name=outliername[i], sequence=outlierseq[i,:],
-                crosslinks=outliercl,
-                path=SCNPpath
-            )
-            scnp.DrawGraph()
-
+    if plotaspects['plot'] == 'errorbar':
+        plotaspects['xerr'] = f'binmeanerrscaled{plotaspects['xdata']}'
+        plotaspects['yerr'] = f'binmeanerr{plotaspects['ydata']}'
+        plotaspects['xdata'] = f'binmeanscaled{plotaspects['xdata']}'
+        plotaspects['ydata'] = f'binmean{plotaspects['ydata']}'
 
     evaplot = plotlib.PlotData(plotaspects, DataObjs)
     evaplot.GetData()
     evaplot.CreatePlot()
+    if plotaspects['plot'] == 'errorbar':
+        evaplot.ax.fill_between(
+            fillx, uppery, lowery, color='orange', alpha=0.4
+        )
+    evaplot.SavePlot()
     
 
 print('Evaluation finished')

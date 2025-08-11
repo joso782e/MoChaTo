@@ -18,6 +18,7 @@ sys.path.append(os.path.dirname(__file__))
 import MoChaTo_datalib as datalib
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.optimize as opt
 import networkx as nx
 
 
@@ -124,11 +125,11 @@ class PlotData:
         self.rule = PlotRule(plotaspects=plotaspects)
         if isinstance(self.rule.ydata, str):
             self.rule.ydata = [self.rule.ydata]
-        if (
-            isinstance(self.rule.yerr, str)
-            and self.rule.plot == 'errorbar'
-        ):
+        if self.rule.plot == 'errorbar':
+            if isinstance(self.rule.yerr, str):
                 self.rule.yerr = [self.rule.yerr]
+            if isinstance(self.rule.xerr, str):
+                self.rule.xerr = [self.rule.xerr]
 
         if not (
             set(self.rule.Nrule).issubset([obj.N for obj in dataobjs]) or
@@ -264,15 +265,15 @@ class PlotData:
                 # get ydata for current rule and append to ydata list
                 ydata.append(
                     np.stack([
-                        getattr(obj, rule.ydata[i]) for obj in self.data
-                        if getattr(obj, rule.sortby) == j
+                        getattr(obj, rule.ydata[i])
+                        for obj in self.data if getattr(obj, rule.sortby) == j
                     ], axis=0)
                 )
                 # if errorbar plot, get data for errors
                 if rule.plot == 'errorbar':
                     # if xerr is given, get xerr for current rule and append to
                     # xerr list
-                    if rule.xerr in dir(self.data[0]):
+                    if rule.xerr[i] in dir(self.data[0]):
                         xerr.append(
                             np.stack([
                                 getattr(obj, rule.xerr[i]) for obj in self.data
@@ -283,20 +284,16 @@ class PlotData:
                         isinstance(rule.xerr[i], (int, float))
                         or str(rule.xerr[i]).isnumeric()
                     ):
-                        xerr.append(np.full_like(
-                            xdata[i], float(rule.xerr[i]), dtype=float
-                        ))
+                        xerr.append(float(rule.xerr[i]))
                     else:
-                        print(ValueError(
+                        print(
                            f'Warning! Input for xerr empty or not supported. '
                             'xerr will be set to 0'
-                        ))
-                        xerr.append(
-                            np.full_like(xdata[i], 0.0, dtype=float)
                         )
+                        xerr.append(0.0)
                     # if yerr is given, get yerr for current rule and append to
                     # yerr list
-                    if rule.yerr in dir(self.data[0]):
+                    if rule.yerr[i] in dir(self.data[0]):
                         yerr.append(
                             np.stack([
                                 getattr(obj, rule.yerr[i]) for obj in self.data
@@ -307,28 +304,28 @@ class PlotData:
                         isinstance(rule.yerr[i], (int, float))
                         or str(rule.yerr[i]).isnumeric()
                     ):
-                        yerr.append(np.full_like(
-                            ydata[i], float(rule.yerr[i]),dtype=float
-                        ))
+                        yerr.append(rule.yerr[i])
                     else:
-                        print(ValueError(
-                           f'Warning! Input for xerr empty or not supported. '
+                        print(
+                           f'Warning! Input for yerr empty or not supported. '
                             'yerr will be set to 0'
-                        ))
-                        yerr.append(
-                            np.full_like(ydata[i], 0.0, dtype=float)
                         )
+                        yerr.append(0.0)
                 
                 # create label for current rule and append to labels list
                 if rule.label:
                     if len(rule.ydata) > 1:
                         lstr = f'{rule.label[i]}'
                     else:
-                        lstr = f'${rule.sortby}={round(j,2)}$'
-                    labels.append(np.unique([
+                        lstr = f'${rule.sortby}={2*round(j,2)}$' if rule.sortby == 'f' else f'${rule.sortby}={round(j,2)}$'
+                    labellist = [
                         lstr for obj in self.data
                         if getattr(obj, rule.sortby) == j
-                    ]))
+                    ]
+                    if len(labellist) > 1:
+                        labels.append(np.unique(labellist))
+                    else:
+                        labels.append(lstr)
                 # append line styles, line widths, types, marker sizes and
                 # colors to corresponding lists
                 ls.append(
@@ -418,7 +415,7 @@ class PlotData:
                 f'Input "{system}" for system not supported. '
                 'Please set system to "windows" or "linux"'
             )        
-        figpath = eva_path + seperator + 'plots' + seperator +\
+        self.figpath = eva_path + seperator + 'plots' + seperator +\
             rule.plot + '_' + rule.plotdomain + '_' + str(rule.ydata) +\
             '_vs_'+ rule.xdata + seperator + f'N_{rule.Nname}'
                 
@@ -445,31 +442,33 @@ class PlotData:
 
 
         for i in range(len(xdata)):
-            # asume more data points then samples
-            if xdata[i].ndim > 1:
-                if xdata[i].shape[0] < xdata[i].shape[1]:
-                    xdata[i] = xdata[i].T
-                    if rule.plot == 'errorbar':
-                        xerr[i] = xerr[i].T
-            # check if one axis lenght of ydata[i] matches length of axis 0 in
-            # xdata[i], if not raise ValueError
-            if xdata[i].shape[0] != ydata[i].shape[0]:
-                ydata[i] = ydata[i].T
-                if rule.plot == 'errorbar':
-                    yerr[i] = yerr[i].T
-                if xdata[i].shape[0] != ydata[i].shape[0]:
-                    raise ValueError(
-                        f'Data set {i+1} can not be plotted against each '
-                        f'other because their shapes {xdata[i].shape} and '
-                        f'{ydata[i].shape} can not be broadcast together.'
-                    )
-            ax.set_prop_cycle(
-                color=color[i], linestyle=ls[i], lw=lw[i],
-                marker=marker[i], ms=ms[i]
-            )
-                        
             # plot data as diagram or histogram
             if rule.plot == 'diag':
+                    # asume more data points then samples
+                if xdata[i].ndim > 1:
+                    if xdata[i].shape[0] < xdata[i].shape[1]:
+                        xdata[i] = xdata[i].T
+                        if rule.plot == 'errorbar':
+                            if not isinstance(xerr[i], float):
+                                xerr[i] = xerr[i].T
+                # check if one axis lenght of ydata[i] matches length of axis
+                # 0 in xdata[i], if not raise ValueError
+                if xdata[i].shape[0] != ydata[i].shape[0]:
+                    ydata[i] = ydata[i].T
+                    if rule.plot == 'errorbar':
+                        if not isinstance(yerr[i], float):
+                            yerr[i] = yerr[i].T
+                    if xdata[i].shape[0] != ydata[i].shape[0]:
+                        raise ValueError(
+                            f'Data set {i+1} can not be plotted against each '
+                            f'other because their shapes {xdata[i].shape} and '
+                            f'{ydata[i].shape} can not be broadcast together.'
+                        )
+                ax.set_prop_cycle(
+                    color=color[i], linestyle=ls[i], lw=lw[i],
+                    marker=marker[i], ms=ms[i]
+                )
+                
                 # dicide wether to turn auto scale on or not
                 xlow = rule.xlim[0]
                 xup = rule.xlim[1]
@@ -513,45 +512,84 @@ class PlotData:
                         ax.plot(xdata[i], ydata[i])
                     ax.set_xscale(rule.xscale)
                     ax.set_yscale(rule.yscale)
+
             elif rule.plot == 'errorbar':
-                    if rule.label:
-                        ax.errorbar(
-                            np.squeeze(xdata[i]), np.squeeze(ydata[i]),
-                            np.squeeze(yerr[i]), np.squeeze(xerr[i]),
-                            label=labels[i]
-                        )
-                    else:
-                        ax.errorbar(
-                            np.squeeze(xdata[i]), np.squeeze(ydata[i]),
-                            np.squeeze(yerr[i]), np.squeeze(xerr[i])
-                        )
+                ax.set_prop_cycle(
+                    color=color[i], linestyle=ls[i], lw=lw[i],
+                    marker=marker[i], ms=ms[i]
+                )
+                ax.set_xscale(rule.xscale)
+                ax.set_yscale(rule.yscale)
+                if rule.label:
+                    ax.errorbar(
+                        np.squeeze(xdata[i]), np.squeeze(ydata[i]),
+                        np.squeeze(yerr[i]), np.squeeze(xerr[i]),
+                        ecolor='orangered', elinewidth=0.5,
+                        label=labels[i]
+                    )
+                else:
+                    ax.errorbar(
+                        np.squeeze(xdata[i]), np.squeeze(ydata[i]),
+                        np.squeeze(yerr[i]), np.squeeze(xerr[i]),
+                        ecolor='orangered', elinewidth=0.5
+                    )
+                if np.any(yerr[i]):
+                    minx, maxx, posy = PlotErrorbarLimits(
+                        xdata[i], ydata[i], err=yerr[i], forerror='y'
+                    )
+                    ax.hlines(
+                        posy, minx, maxx, color='orangered', linewidth=0.5
+                    )
+                if np.any(xerr[i]):
+                    miny, maxy, posx = PlotErrorbarLimits(
+                        xdata[i], ydata[i], err=xerr[i], forerror='x'
+                    )
+                    ax.vlines(
+                        posx, miny, maxy, color='orangered', linewidth=0.5
+                    )
+
             elif rule.plot == 'hist':
-                # create bins and plot data in histogram
-                bins = np.linspace(
-                    np.min(ydata[i]), np.max(ydata[i]), rule.binnum
-                )
-                ax.hist(
-                    ydata[i].flatten(), bins=bins, density=True,
-                    label=labels
-                )
-                # display mean value and calculate optimal position for text
-                # and line
-                hax = ax.get_ylim()[1] - ax.get_ylim()[0]
-                ymin = -ax.get_ylim()[0]/hax
-                ymax = ax.get_ylim()[1]/hax
-                ax.axvline(
-                    np.mean([ydata[i]]), ymin, ymax, 
-                )
-                ax.text(np.mean(
-                    ydata[i]), ymax*hax,
-                    f'mean value:\n{round(np.mean(ydata[i]),4)}',
-                    horizontalalignment='center',
-                    verticalalignment='bottom'
-                )                
+                # compute histogram
+                counts, bins = np.histogram(ydata[i], bins=rule.binnum)
+                counts = counts/np.sum(counts)
+                bins = (bins[:-1] + bins[1:])/2
+
+                if rule.plotdomain == 'expdistr':
+                    counts = np.cumsum(counts)
+                    def CumDistrFunc(x, a0, a1):
+                        return a1 - np.exp(-a0*x)
+                    fit, _ = opt.curve_fit(CumDistrFunc, bins, counts)
+                    ax.set_ylim((None, 1.25))
+                    ax.plot(
+                        bins, CumDistrFunc(bins, fit[0], fit[1]), ls='-',
+                        lw=1.0, color='orangered',
+                        label=f'fitted cumulative\ndistribution function'
+                    )
+                    print(f'a0 = {fit[0]}')
+                    print(f'a1 = {fit[1]}')
+                    ax.legend(loc='upper left')
+                else:
+                    mean = np.sum(counts*bins)
+                    # display mean value and calculate optimal position for
+                    # text and line
+                    ymax = np.max(counts)
+                    ax.set_ylim((None, ymax*1.2))
+                    ax.axvline(
+                        mean, 0, 1/1.225, ls='--', lw=0.5, color='black'
+                    )
+                    ax.text(np.mean(
+                        ydata[i]), ymax,
+                        f'expectation value:\n{round(np.mean(ydata[i]),4)}',
+                        horizontalalignment='center',
+                        verticalalignment='bottom'
+                    )
+
+                ax.bar(bins, counts, color='dodgerblue')
+                
             else:
                 raise ValueError(
                     f'Plot type "{rule.plot}" not supported. '
-                    'Please set plot to "diag" or "hist"'
+                    'Please set plot to "diag", "hist" or "errorbar".'
                 )
             
         if rule.legend:
@@ -569,68 +607,17 @@ class PlotData:
                 labeldict.values(), labeldict.keys(), loc=rule.legend_loc
             )
         
+        self.ax = ax
+        self.fig = fig
+        
+    def SavePlot(self) -> None:
+        '''
+        
+        '''
+        rule = self.rule
         SavePlot(
-            fig=fig, name=f'f_{rule.fname}', path=figpath
+            fig=self.fig, name=f'f_{rule.fname}', path=self.figpath
         )
-
-
-def SCNPFilter(
-        dataobj:datalib.FileData, N:int, constrains:dict, condition:list[str]
-    ) -> np.ndarray:
-    '''
-    Function to filter SCNP data objects
-
-    Input:
-    dataobj (dtype = datalib.FileData)...   FileData object with SCNP data
-    N (dtype = int)...                      number of SCNPs to check
-    constrains (dtype = dict)...            dictionary with constrains for
-                                            filtering dataobj, keys are
-                                            attributes of FileData object,
-                                            must match length of condition
-    condition (dtype = list[str])...        condition if value in constrain
-                                            category of SCNP should be 'less',
-                                            'equal' or 'greater' then the
-                                            constrains value,
-                                            must match length of constrains
-
-    Output:
-    idx (dtype = np.ndarray)...             boolean array with True for
-                                            values that match the constrains
-                                            and condition, False otherwise
-    '''
-    conskey = list(constrains.keys())    # get keys of constrains dict
-
-    if len(conskey) != len(condition):
-        if len(condition) == 1:
-            condition = [condition[0]] * len(conskey)
-            print(condition)
-        else:
-            raise ValueError(
-                'Length of constrains and condition must match. '
-                f'Length of constrains: {len(conskey)}, '
-                f'length of condition: {len(condition)}'
-            )
-    
-    idx = np.full(N, 0)
-    for i in range(len(conskey)):
-        param = getattr(dataobj, conskey[i])  # get parameter from dataobj
-        if condition[i] == 'less':
-            # check if parameter is less then constrains value
-            idx += param < constrains[conskey[i]]
-        elif condition[i] == 'equal':
-            # check if parameter is equal to constrains value
-            idx += param == constrains[conskey[i]]
-        elif condition[i] == 'greater':
-            # check if parameter is greater then constrains value
-            idx += param > constrains[conskey[i]]
-        else:
-            raise ValueError(
-                f'Condition "{condition[i]}" not supported. '
-                'Please use "less", "equal" or "greater".'
-            )
-
-    # return boolean array with True for values that match all condition
-    return idx == len(conskey)
 
 
 class PlotSCNP:
@@ -706,7 +693,7 @@ class PlotSCNP:
         
         pos = nx.kamada_kawai_layout(self.G)
         nx.draw(
-            self.G, pos, ax=self.ax, labels=self.labels, node_size=7,
+            self.G, pos, ax=self.ax, labels=self.labels, node_size=25,
             node_color=node_color, edge_color=edge_color, style=edge_ls,
             with_labels=False
         )
@@ -775,3 +762,130 @@ def SavePlot(
     fig.savefig(path + seperator + name + fileformat)
     plt.pause(0.1)                                  # pause for 0.1 seconds
     plt.close()                                     # close figure
+
+
+def SCNPFilter(
+        dataobj:datalib.FileData, N:int, constrains:dict, condition:list[str]
+    ) -> np.ndarray:
+    '''
+    Function to filter SCNP data objects
+
+    Input:
+    dataobj (dtype = datalib.FileData)...   FileData object with SCNP data
+    N (dtype = int)...                      number of SCNPs to check
+    constrains (dtype = dict)...            dictionary with constrains for
+                                            filtering dataobj, keys are
+                                            attributes of FileData object,
+                                            must match length of condition
+    condition (dtype = list[str])...        condition if value in constrain
+                                            category of SCNP should be 'less',
+                                            'equal' or 'greater' then the
+                                            constrains value,
+                                            must match length of constrains
+
+    Output:
+    idx (dtype = np.ndarray)...             boolean array with True for
+                                            values that match the constrains
+                                            and condition, False otherwise
+    '''
+    conskey = list(constrains.keys())    # get keys of constrains dict
+
+    if len(conskey) != len(condition):
+        if len(condition) == 1:
+            condition = [condition[0]] * len(conskey)
+            print(condition)
+        else:
+            raise ValueError(
+                'Length of constrains and condition must match. '
+                f'Length of constrains: {len(conskey)}, '
+                f'length of condition: {len(condition)}'
+            )
+    
+    idx = np.full(N, 0)
+    for i in range(len(conskey)):
+        param = getattr(dataobj, conskey[i])  # get parameter from dataobj
+        if condition[i] == 'less':
+            # check if parameter is less then constrains value
+            idx += param < constrains[conskey[i]]
+        elif condition[i] == 'equal':
+            # check if parameter is equal to constrains value
+            idx += param == constrains[conskey[i]]
+        elif condition[i] == 'greater':
+            # check if parameter is greater then constrains value
+            idx += param > constrains[conskey[i]]
+        else:
+            raise ValueError(
+                f'Condition "{condition[i]}" not supported. '
+                'Please use "less", "equal" or "greater".'
+            )
+
+    # return boolean array with True for values that match all condition
+    return idx == len(conskey)
+
+
+def FilterPlotSCNP(
+    dataobj:datalib.FileData, constrains:dict, condition:list[str],
+    SCNPpath:str
+) -> None:
+    '''
+    
+    '''
+    idx = SCNPFilter(
+            dataobj=dataobj, N=dataobj.S.shape[0], constrains=constrains,
+            condition=condition,
+        )
+    
+    seq = dataobj.sequence[idx,:]
+    cl1 = dataobj.clmat[idx,:,1]
+    cl2 = dataobj.clmat[idx,:,2]
+    name = []
+
+    for i in range(len(idx)):
+        if idx[i]:
+            nstr =''
+            for conkey in constrains.keys():
+                atr = getattr(dataobj,conkey)
+                nstr += f'{conkey}_{round(float(atr[i]),5)}'
+            name.append(nstr)
+        
+
+    for i in range(len(name)):
+        outliercl = np.stack(
+            [cl1[i,:], cl2[i,:]], axis=1
+        )
+        scnp = PlotSCNP(
+            name=name[i], sequence=seq[i,:],
+            crosslinks=outliercl,
+            path=SCNPpath
+        )
+        scnp.DrawGraph()
+
+
+def PlotErrorbarLimits(
+            xdata:np.ndarray, ydata:np.ndarray, err:np.ndarray, forerror:str
+        ):
+        '''
+        
+        '''
+        if forerror == 'y':
+            errdirect = ydata
+            lengthdata = xdata
+        elif forerror == 'x':
+            errdirect = xdata
+            lengthdata = ydata
+        else:
+            raise ValueError(
+                f'Warning! Input {forerror} for "forerror" not supported. '
+                'Choose either "x" or "Y".'
+            )
+
+        diff = np.max(lengthdata) - np.min(lengthdata)
+        pos = np.concatenate(
+            [errdirect + err, errdirect - err]
+        )
+        minbar = lengthdata - diff/100
+        minbar = np.concatenate([minbar, minbar])
+        maxbar = lengthdata + diff/100
+        maxbar = np.concatenate([maxbar, maxbar])
+
+        return minbar, maxbar, pos
