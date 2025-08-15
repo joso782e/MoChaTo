@@ -55,6 +55,11 @@ def FitGyraRad(x, a0, a1):
     '''
     return a0 - 1/3*(a1*x)**2
 
+def ScatterRange():
+    '''
+    
+    '''
+
 
 import json
 with open(
@@ -134,12 +139,12 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     
     plotaspects['figsize'] = (6,4)
     plotaspects['Nrule'] = [100]
-    plotaspects['frule'] = [1/8]
-    plotaspects['title']= r'Mean loop length binned over $c_2$'
-    plotaspects['xlabel'] = r'$c_2\cdot 10^3$'
-    plotaspects['ylabel'] = r'$\iota$'
+    plotaspects['frule'] = [1/4]
+    plotaspects['title']= r'Standard deviation of mean loop position binned over $c_2$'
+    plotaspects['xlabel'] = r'$c_2 \cdot 10^3$'
+    plotaspects['ylabel'] = r'$s_{n_l}$'
     plotaspects['xdata'] = 'qqSc2'
-    plotaspects['ydata'] = 'mll'
+    plotaspects['ydata'] = 'loopdev'
     plotaspects['xlim'] = [None, None]
     plotaspects['ylim'] = [None, None]
     plotaspects['xscale'] = 'linear'
@@ -151,7 +156,7 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['color'] = 'dodgerblue'
     plotaspects['plotdomain'] = 'PCspace'
     plotaspects['plot'] = 'errorbar'
-    plotaspects['sortby'] = 'N'
+    plotaspects['sortby'] = 'f'
     plotaspects['legend'] = False
     plotaspects['legend_loc'] = 'upper left'
     plotaspects['label'] = False
@@ -198,27 +203,35 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
             np.sum(1/obj.rouseeigv[i])/obj.N for i in range(len(obj.rouseeigv))
         ]))
 
+        #obj.Blockiness(blocktype=int(plotaspects['ydata'][1]), normalize=True)
+
         # calculate qqS
         obj.ManipulateData(args=['q', 'q', 'S'], setname='qqS', operant='*')
 
+
         # perform PCA on 'qqS'
         obj.PerfPCA(setname='qqS')
+        obj.PerfRecon(setname='qqS', normalize=True)
         obj.LoopBalanceProfile()
-        obj.ScaleData(setname=f'{plotaspects['xdata']}', scalfac=1000)
+        obj.MeanVariance(setname='qqS', axis=0, normalizedvar=False)
+        obj.ScaleData(setname=plotaspects['xdata'], scalfac=1e3)        
+
+
         if plotaspects['plot'] == 'errorbar':
             obj.BinData(
                 xdata=f'scaled{plotaspects['xdata']}',
                 ydata=f'{plotaspects['ydata']}', bins=20, ppb=False
             )
 
-            x1 = getattr(obj, f'binmeanscaled{plotaspects['xdata']}') + getattr(obj, f'binerrscaled{plotaspects['xdata']}')
-            x2 = getattr(obj, f'binmeanscaled{plotaspects['xdata']}') - getattr(obj, f'binerrscaled{plotaspects['xdata']}')
-            fillx = np.concatenate([x1,x2])
-            fillx = np.sort(fillx)
-            uppery = getattr(obj, f'binmean{plotaspects['ydata']}') + getattr(obj, f'binerr{plotaspects['ydata']}')
-            uppery = np.repeat(uppery, 2)
-            lowery = getattr(obj, f'binmean{plotaspects['ydata']}') - getattr(obj, f'binerr{plotaspects['ydata']}')
-            lowery = np.repeat(lowery, 2)
+            if len([plotaspects['ydata']]) == 1 and len(plotaspects['frule']) == 1:
+                x1 = getattr(obj, f'binmeanscaled{plotaspects['xdata']}') + getattr(obj, f'binerrscaled{plotaspects['xdata']}')
+                x2 = getattr(obj, f'binmeanscaled{plotaspects['xdata']}') - getattr(obj, f'binerrscaled{plotaspects['xdata']}')
+                fillx = np.concatenate([x1,x2])
+                fillx = np.sort(fillx)
+                uppery = getattr(obj, f'binmean{plotaspects['ydata']}') + getattr(obj, f'binerr{plotaspects['ydata']}')
+                uppery = np.repeat(uppery, 2)
+                lowery = getattr(obj, f'binmean{plotaspects['ydata']}') - getattr(obj, f'binerr{plotaspects['ydata']}')
+                lowery = np.repeat(lowery, 2)
         
         
     if plotaspects['plot'] == 'errorbar':
@@ -230,7 +243,7 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     evaplot = plotlib.PlotData(plotaspects, DataObjs)
     evaplot.GetData()
     evaplot.CreatePlot()
-    if plotaspects['plot'] == 'errorbar':
+    if plotaspects['plot'] == 'errorbar' and len([plotaspects['ydata']]) == 1  and len(plotaspects['frule']) == 1:
         evaplot.ax.fill_between(
             fillx, uppery, lowery, color='orange', alpha=0.4
         )

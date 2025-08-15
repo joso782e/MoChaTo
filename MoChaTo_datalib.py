@@ -59,7 +59,7 @@ class FileData(PCA):
         self.condi = condi
         self.N = N
         self.positions = np.linspace(1, N, N)    # monomer positions in chain
-        self.f = 1/f
+        self.f = 2/f
         self.q = q
         self.S = S
         self.clmat = np.asanyarray(clmat, dtype=np.int_)
@@ -148,7 +148,7 @@ class FileData(PCA):
         - self.loopprofiles...          balance profile over sequences
         - self.loopbalances...          normalized and centered balances of
                                         profiles
-        - self.loopdevbalances...       normalized deviation of balances
+        - self.loopdev...               normalized deviation of balances
         '''
         sequence = self.positions
         clmat = self.clmat
@@ -848,6 +848,7 @@ def Blockiness(
                                         normalized to sequence length
     '''
     # create boolean sequence depending on blocktype
+    f = f/2
     if blocktype > 4:
         f = 2*f
         bmin = np.abs(2*(f - 0.5))
@@ -910,15 +911,18 @@ def BalanceProfile(
         b = 1.5
         devb = 0
     else:
-        b = np.sum(np.multiply(profile, sequence))/np.sum(profile)
-        devb = np.sqrt(
-            np.sum((np.multiply(profile, sequence)/np.sum(profile) - b)**2)
-        )/n
+        normprof = profile/np.sum(profile)
+        b = np.sum(normprof)
+        sig = np.sum((sequence - b)**2)/(n - 1)
+        w = np.sum(normprof)/n
+        w2 = np.sum(normprof**2)/n
+
+        devb = sig*w2/w**2
 
         b = np.abs(2*b/n - 1)           # normalized and centered balance on
                                         # sequence
     
-    return np.squeeze(profile), float(b), float(devb/n)
+    return np.squeeze(profile), float(b), float(np.sqrt(devb)/n)
 
 
 def Extrema(

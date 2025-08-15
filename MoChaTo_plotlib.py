@@ -317,7 +317,7 @@ class PlotData:
                     if len(rule.ydata) > 1:
                         lstr = f'{rule.label[i]}'
                     else:
-                        lstr = f'${rule.sortby}={2*round(j,2)}$' if rule.sortby == 'f' else f'${rule.sortby}={round(j,2)}$'
+                        lstr = f'${rule.sortby}={round(j,2)}$' if rule.sortby == 'f' else f'${rule.sortby}={round(j,2)}$'
                     labellist = [
                         lstr for obj in self.data
                         if getattr(obj, rule.sortby) == j
@@ -394,6 +394,78 @@ class PlotData:
         self.marker = marker
         self.ms = ms
         self.color = color
+    
+    def Quatsch(
+            self, eva_path:str=config['eva_path'], system:str=config['system']
+    ) -> None:
+        
+        rule = self.rule
+
+        if system == 'windows':
+            seperator = '\\'            # define seperator for windows 
+                                        # operating system
+        elif system == 'linux':
+            seperator = '/'             # define seperator for linux
+                                        # operating system
+        else:
+            raise ValueError(
+                f'Input "{system}" for system not supported. '
+                'Please set system to "windows" or "linux"'
+            )        
+        self.figpath = eva_path + seperator + 'plots' + seperator +\
+            rule.plot + '_' + rule.plotdomain + '_' + str(rule.ydata) +\
+            '_vs_'+ rule.xdata + seperator + f'N_{rule.Nname}'
+                
+        fig = plt.figure(figsize=rule.figsize)      # create figure
+        ax = fig.add_subplot(1, 1, 1)               # create subplot
+
+        # set title and axis labels
+        ax.set_title(rule.title)
+        ax.set_xlabel(rule.xlabel)
+        ax.set_ylabel(rule.ylabel)
+        ax.grid(axis='both', ls='--', lw=0.5, color='grey')
+
+        # dicide wether to turn auto scale on or not
+        xlow = rule.xlim[0]
+        xup = rule.xlim[1]
+        ylow = rule.ylim[0]
+        yup = rule.ylim[1]
+        if xup or xlow:
+            xauto = False
+        else:
+            xauto = True
+        
+        if yup or ylow:
+            yauto = False
+        else:
+            yauto = True
+
+        # set axis view limits
+        ax.set_xlim(left=xlow, right=xup, auto=xauto)
+        ax.set_ylim(bottom=ylow, top=yup, auto=yauto)
+
+        self.ax = ax
+        self.fig = fig
+
+        for sort in getattr(self, f'{rule.sortby}rule'):
+            for obj in [
+                obj for obj in self.data
+                if getattr(obj, f'{rule.sortby}') == sort
+            ]:
+                self.PlotData(obj)
+
+    def PlotData(self, obj:list[datalib.FileData]) -> None:
+        '''
+        
+        '''
+        rule = self.rule
+        xdata = rule.xdata
+        ax = self.ax
+
+        if len(obj) == 1:
+            for ydata in rule.ydata:
+                ax.plot()
+
 
     def CreatePlot(
             self, eva_path:str=config['eva_path'], system:str=config['system']
@@ -610,14 +682,29 @@ class PlotData:
         self.ax = ax
         self.fig = fig
         
-    def SavePlot(self) -> None:
+    def SavePlot(self, name:str=False, path:str=False) -> None:
         '''
         
         '''
         rule = self.rule
-        SavePlot(
-            fig=self.fig, name=f'f_{rule.fname}', path=self.figpath
-        )
+        if name:
+            if path:
+                SavePlot(
+                    fig=self.fig, name=f'{name}', path=path
+                )
+            else:
+                SavePlot(
+                    fig=self.fig, name=f'{name}', path=self.figpath
+                )
+        else:
+            if path:
+                SavePlot(
+                    fig=self.fig, name=f'f_{rule.fname}', path=path
+                )
+            else:
+                SavePlot(
+                    fig=self.fig, name=f'f_{rule.fname}', path=self.figpath
+                )
 
 
 class PlotSCNP:
