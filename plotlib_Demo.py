@@ -97,6 +97,12 @@ class PlotData:
             )
             rules['yscale'] = "linear"
 
+        if not 'labels' in rules.keys():
+            print(
+                "Warning! Input dictionary 'rules' does not contain key " \
+                "'labels'. Graph labels will be ['data1', 'data2', ...]."
+            )
+
         return rules
     
     @staticmethod
@@ -115,7 +121,7 @@ class PlotData:
             if yData.size[0] != xData.size[0]:
                 raise ValueError(
                     f"Warning! The shape of xData {xData.shape} and " \
-                    f"yData {yData.shape} can not be broadcasted " \
+                    f"yData {yData.T.shape} can not be broadcasted " \
                     "together. Please check the data objects in " \
                     "input 'datalist'."
                 )
@@ -196,6 +202,8 @@ class PlotData:
         '''
         rules = self.rules
         dataList = self.datalist
+
+        self.labels = []
         
         if sort:
             # sort dataobjects for same value in property defined by input
@@ -212,15 +220,25 @@ class PlotData:
                     getattr(obj, rules['ydata']) for obj in dataList
                     if getattr(obj, sort) == val
                 ]
+                self.labels.append(f'{sort} = {val}')
                 xData, yData = self.CheckDataArrays(xData, yData)
                 yield(xData, yData)
         else:
+            if 'labels' in rules.keys():
+                self.labels = rules['labels']
+            else:
+                i = 0
+
             for obj in dataList:
                 xData = getattr(obj, rules['xdata'])
                 yData = getattr(obj, rules['ydata'])
+                if not ('labels' in rules.keys()):
+                    self.labels.append(f'data{i+1}')
+                    i += 1
+                    
                 xData, yData = self.CheckDataArrays(xData, yData)
                 yield(xData, yData)
-    
+
     def AddData2Plot(
         self,
         sort: str | None = None
@@ -231,29 +249,231 @@ class PlotData:
         rules = self.rules
         ax = self.ax
 
-        for xData, yData in self.GetData(sort=sort):
+        labelCycler = Cycler(self.labels)
+        
 
-            if rules['plot'] == 'errorbar':
+        for xData, yData in self.GetData(sort=sort):
+            if rules['representation'] == 'Kratky':
+                yData = np.multiply(yData, xData**2)
+
+            if rules['plot'] == 'statistical binning':
                 xData, yData, xErr, yErr, xScatter, yScatter = BinData(
                     xData, yData, rules['bins']
                 )
-                xMin, xMax, xPos = ComputeErrorbarLimits(
+                xMin, xMax, yPos = ComputeErrorbarLimits(
                     xData, yData, xErr, 'x'
                 )
-                yMin, yMax, yPos = ComputeErrorbarLimits(
+                yMin, yMax, xPos = ComputeErrorbarLimits(
                     xData, yData, yErr, 'y'
                 )
+
+                # include data for error bar plotting to data of boundary bar
+                # plotting
+                yPos = np.concatenate([yPos, yData])
+                xMin = np.concatenate([xMin, xData - xErr])
+                xMax = np.concatenate([xMax, xData + xErr])
+                xPos = np.concatenate([xPos, xData])
+                yMin = np.concatenate([yMin, yData - yErr])
+                yMax = np.concatenate([yMax, yData + yErr])
+
+                vLineHandle = ax.vlines(
+                    xPos, ymin=yMin, ymax=yMax, color='orangered', lw=0.5
+                )
+                hLineHandle = ax.hlines(
+                    yPos, xmin=xMin, xmax=xMax, color='orangered', lw=0.5
+                )
+
                 xFill, upperFill, lowerFill = ComputeScatterTube(
                     xData, yData, xScatter, yScatter
                 )
-                ax.fill_between(
-                    xFill, upperFill, lowerFill, color='orange', alpha=0.4,
-                    label='data scattering'
+                fillHandle = ax.fill_between(
+                    xFill, upperFill, lowerFill, color='orange', alpha=0.4
                 )
-                ax.
+            
+            dataHandle = ax.plot(
+                xData, yData
+            )
 
-            if rules['representation'] == 'Kratky':
-                yData = np.multiply(yData, xData**2)
+            if rules['plot'] == 'statistical binning':
+                handles = [(dataHandle, vLineHandle, hLineHandle), fillHandle]
+                labels = [labelCycler.Cycle(), 'data scattering']
+            else:
+                handles = dataHandle
+                labels = labelCycler.Cycle()
+
+            ax.legend(
+                handles, labels
+            )
+
+
+class PlotSCNP:
+    '''
+    Class to plot a graph modeling the cross-linked conformation of a SCNP in
+    2D
+    '''
+
+    def __init__(
+        self,
+        name: str,
+        sequence: np.ndarray,
+        crosslinks: np.ndarray,
+        path: str
+    ):
+        '''
+        Constructor for PlotSCNP class
+
+        Input:
+        name (dtype = str)...               name of plot file
+        sequence (dtype = nd.ndarray)...    1D-array object with SCNP
+                                            data
+        crosslinks (dtype = nd.ndarray)...  2D-array with crosslinks other
+                                            than those forming precursors
+        path (dtype = str)...               path to save plot file
+        '''
+        self.name = name
+        self.sequence = sequence
+        self.crosslinks = crosslinks
+        self.path = path
+        self.fig = plt.figure(figsize=(6, 6))
+        self.ax = self.fig.add_subplot(1, 1, 1)
+
+    def ConstructGraph(self) -> None:
+        '''
+        
+        '''
+        seq = self.sequence
+        cl = self.crosslinks
+
+        if cl.ndim != 2:
+            raise ValueError(
+                'Crosslinks must be a 2D-array with shape (2, n) or (n, 2), '
+                f'got {cl.shape} instead.'
+            )
+        
+        if cl.shape[0] != 2:
+            cl = cl.T
+
+        self.G = nx.Graph()                 # create empty graph object
+        spec = ['r', 'b', 'a']
+        color = ['orangered', 'black', 'limegreen']
+
+        nodes = [(i, {'color': color[seq[i]-2]}) for i in range(len(seq))]
+        edges = [
+            (i, i+1, {'color': 'black', 'ls': '-'}) for i in range(len(seq)-1)
+        ]
+        edges += [
+            (cl[0, i], cl[1, i], {'color': 'cyan', 'ls': '--'})
+            for i in range(cl.shape[1]) if (cl[0, i] and cl[1, i])
+        ]
+
+        self.labels = {
+            i: f'{spec[seq[i]-2]}' for i in range(len(seq))
+        }
+
+        self.G.add_nodes_from(nodes)
+        self.G.add_edges_from(edges)
+
+    def DrawGraph(self):
+        '''
+
+        '''
+        if not hasattr(self, 'G'):
+            self.ConstructGraph()
+        
+        node_color = [self.G.nodes[i]['color'] for i in self.G.nodes]
+        edge_color = [self.G[i][j]['color'] for (i,j) in self.G.edges]
+        edge_ls = [self.G[i][j]['ls'] for (i,j) in self.G.edges]
+        
+        pos = nx.kamada_kawai_layout(self.G)
+        nx.draw(
+            self.G, pos, ax=self.ax, labels=self.labels, node_size=25,
+            node_color=node_color, edge_color=edge_color, style=edge_ls,
+            with_labels=False
+        )
+        self.ax.legend(
+            handles=[
+                plt.Line2D(
+                    [0], [0], marker='o', color='w',
+                    markerfacecolor='orangered', markersize=7,
+                    label='reactive bead'
+                ),
+                plt.Line2D(
+                    [0], [0], marker='o', color='w',
+                    markerfacecolor='black', markersize=7,
+                    label='backbone bead'
+                ),
+                plt.Line2D(
+                    [0], [0], marker='o', color='w',
+                    markerfacecolor='limegreen', markersize=7,
+                    label='activated bead'
+                ),
+                plt.Line2D(
+                    [0], [0], color='cyan', lw=1, ls='--',
+                    label='crosslink'
+                ),
+                plt.Line2D(
+                    [0], [0], color='black', lw=1, label='single-chain bond'
+                )
+            ]
+        )
+
+        SavePlot(
+            fig=self.fig, name=self.name, path=self.path
+        )
+
+
+class Cycler:
+    '''
+    Class to create a cycler
+    '''
+
+    def __init__(self, iterable):
+        self.count = 0
+        if not isinstance(iterable, (list, tuple, np.ndarray)):
+            raise TypeError(
+                f'Warning! Input of type {type(iterable)} not supported.'
+            )
+        self.iterable = iterable
+    
+    def Cycle(self):
+        '''
+        Function to cycle through iterable
+        '''
+        if self.count >= len(self.iterable):
+            self.count = 0
+        item = self.iterable[self.count]
+        self.count += 1
+        return item
+    
+    def Current(self):
+        '''
+        Function to get current item in iterable
+        '''
+        if self.count >= len(self.iterable):
+            self.count = 0
+        return self.iterable[self.count]
+    
+    def Increase(self):
+        '''
+        Function to increase count by 1
+        '''
+        if self.count >= len(self.iterable):
+            self.count = 0
+        else:
+            self.count += 1
+    
+    def FullCycle(self):
+        '''
+        Function to perform full cycle through iterable
+        '''
+        for i in range(len(self.iterable)):
+            yield self.Cycle()
+    
+    def Reset(self):
+        '''
+        Function to reset cycler
+        '''
+        self.count = 0
 
 
 def BinData(
@@ -361,43 +581,43 @@ def BinData(
 
 
 def ComputeErrorbarLimits(
-            xData:np.ndarray,
-            yData:np.ndarray,
-            err:np.ndarray,
-            forError:str
-        ):
-        '''
-        
-        '''
-        if forError == 'y':
-            errDirect = yData
-            lengthData = xData
-        elif forError == 'x':
-            errDirect = xData
-            lengthData = yData
-        else:
-            raise ValueError(
-                f'Warning! Input {forError} for "forError" not supported. '
-                'Choose either "x" or "y".'
-            )
-
-        diff = np.max(lengthData) - np.min(lengthData)
-        pos = np.concatenate(
-            [errDirect + err, errDirect - err]
+    xData: np.ndarray,
+    yData: np.ndarray,
+    err: np.ndarray,
+    forError: str
+):
+    '''
+    
+    '''
+    if forError == 'y':
+        errDirect = yData
+        lengthData = xData
+    elif forError == 'x':
+        errDirect = xData
+        lengthData = yData
+    else:
+        raise ValueError(
+            f'Warning! Input {forError} for "forError" not supported. '
+            'Choose either "x" or "y".'
         )
-        minbar = lengthData - diff/100
-        minbar = np.concatenate([minbar, minbar])
-        maxbar = lengthData + diff/100
-        maxbar = np.concatenate([maxbar, maxbar])
 
-        return minbar, maxbar, pos
+    diff = np.max(lengthData) - np.min(lengthData)
+    pos = np.concatenate(
+        [errDirect + err, errDirect - err]
+    )
+    minbar = lengthData - diff/100
+    minbar = np.concatenate([minbar, minbar])
+    maxbar = lengthData + diff/100
+    maxbar = np.concatenate([maxbar, maxbar])
+
+    return minbar, maxbar, pos
 
 
 def ComputeScatterTube(
-        xData: np.ndarray,
-        yData: np.ndarray,
-        stdDevX: np.ndarray,
-        stdDevY: np.ndarray
+    xData: np.ndarray,
+    yData: np.ndarray,
+    stdDevX: np.ndarray,
+    stdDevY: np.ndarray
 ) -> tuple[np.ndarray]:
     '''
     Function to compute the scatter tube for given x and y data with errors
@@ -437,3 +657,141 @@ def ComputeScatterTube(
     lowerY = np.concatenate([lowerY, lowerY])
 
     return xFill[sortIdx], upperY[sortIdx], lowerY[sortIdx]
+
+
+def SavePlot(
+    fig: plt.Figure,
+    name: str,
+    path: str,
+    system: str = 'windows',
+    fileformat: str = '.svg'
+) -> None:
+    '''
+    Function to safe plot
+
+    Input:
+    fig (dtype = plt.Figure)...     figure with ploted data
+    name (dtype = str)...           name of plot file
+    path (dtype = str)...           path to safe plot file
+    system (dtype = str)...         name of operating system,
+                                    either 'windows' or 'linux'
+    fileformat (dtype = str)...     file format to safe plot file to
+
+    output variables:
+    None
+    ---------------------------------------------------------------------------
+    '''   
+    if system == 'windows':
+        seperator = '\\'                    # define seperator for windows 
+                                            # operating system
+    elif system == 'linux':
+        seperator = '/'                     # define seperator for linux
+                                            # operating system
+    
+    # create directories if they do not exist
+    if not exists(path):
+        os.makedirs(path)
+    
+    # save figure as .png
+    fig.savefig(path + seperator + name + fileformat)
+    plt.pause(0.1)                                  # pause for 0.1 seconds
+    plt.close()                                     # close figure
+
+
+def SCNPFilter(
+    dataobj: datalib.FileData,
+    N: int,
+    constrains: dict,
+    condition: list[str]
+) -> np.ndarray:
+    '''
+    Function to filter SCNP data objects
+
+    Input:
+    dataobj (dtype = datalib.FileData)...   FileData object with SCNP data
+    N (dtype = int)...                      number of SCNPs to check
+    constrains (dtype = dict)...            dictionary with constrains for
+                                            filtering dataobj, keys are
+                                            attributes of FileData object,
+                                            must match length of condition
+    condition (dtype = list[str])...        condition if value in constrain
+                                            category of SCNP should be 'less',
+                                            'equal' or 'greater' then the
+                                            constrains value,
+                                            must match length of constrains
+
+    Output:
+    idx (dtype = np.ndarray)...             boolean array with True for
+                                            values that match the constrains
+                                            and condition, False otherwise
+    '''
+    conskey = list(constrains.keys())    # get keys of constrains dict
+
+    if len(conskey) != len(condition):
+        if len(condition) == 1:
+            condition = [condition[0]] * len(conskey)
+            print(condition)
+        else:
+            raise ValueError(
+                'Length of constrains and condition must match. '
+                f'Length of constrains: {len(conskey)}, '
+                f'length of condition: {len(condition)}'
+            )
+    
+    idx = np.full(N, 0)
+    for i in range(len(conskey)):
+        param = getattr(dataobj, conskey[i])  # get parameter from dataobj
+        if condition[i] == 'less':
+            # check if parameter is less then constrains value
+            idx += param < constrains[conskey[i]]
+        elif condition[i] == 'equal':
+            # check if parameter is equal to constrains value
+            idx += param == constrains[conskey[i]]
+        elif condition[i] == 'greater':
+            # check if parameter is greater then constrains value
+            idx += param > constrains[conskey[i]]
+        else:
+            raise ValueError(
+                f'Condition "{condition[i]}" not supported. '
+                'Please use "less", "equal" or "greater".'
+            )
+
+    # return boolean array with True for values that match all condition
+    return idx == len(conskey)
+
+
+def FilterPlotSCNP(
+    dataobj:datalib.FileData, constrains:dict, condition:list[str],
+    SCNPpath:str
+) -> None:
+    '''
+    
+    '''
+    idx = SCNPFilter(
+            dataobj=dataobj, N=dataobj.S.shape[0], constrains=constrains,
+            condition=condition,
+        )
+    
+    seq = dataobj.sequence[idx,:]
+    cl1 = dataobj.clmat[idx,:,1]
+    cl2 = dataobj.clmat[idx,:,2]
+    name = []
+
+    for i in range(len(idx)):
+        if idx[i]:
+            nstr =''
+            for conkey in constrains.keys():
+                atr = getattr(dataobj,conkey)
+                nstr += f'{conkey}_{round(float(atr[i]),5)}'
+            name.append(nstr)
+        
+    for i in range(len(name)):
+        outliercl = np.stack(
+            [cl1[i,:], cl2[i,:]], axis=1
+        )
+        scnp = PlotSCNP(
+            name=name[i], sequence=seq[i,:],
+            crosslinks=outliercl,
+            path=SCNPpath
+        )
+        scnp.DrawGraph()

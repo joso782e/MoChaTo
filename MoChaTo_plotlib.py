@@ -720,9 +720,12 @@ class PlotSCNP:
         Constructor for PlotSCNP class
 
         Input:
+        name (dtype = str)...               name of plot file
         sequence (dtype = nd.ndarray)...    1D-array object with SCNP
                                             data
-        crosslinks (dtype = nd.ndarray)...  2D-array with crosslinks
+        crosslinks (dtype = nd.ndarray)...  2D-array with crosslinks other
+                                            than those forming precursors
+        path (dtype = str)...               path to save plot file
         '''
         self.name = name
         self.sequence = sequence
@@ -812,7 +815,8 @@ class PlotSCNP:
         )
 
         SavePlot(
-            fig=self.fig, name=self.name, path=self.path)
+            fig=self.fig, name=self.name, path=self.path
+        )
 
     
 def SavePlot(
@@ -935,7 +939,6 @@ def FilterPlotSCNP(
                 nstr += f'{conkey}_{round(float(atr[i]),5)}'
             name.append(nstr)
         
-
     for i in range(len(name)):
         outliercl = np.stack(
             [cl1[i,:], cl2[i,:]], axis=1
