@@ -6,7 +6,11 @@ from sklearn.decomposition import PCA
 
 
 def MeanVariance(
-    obj, setname:str, axis:int, normalizedvar:bool=False
+    obj,
+    setname: str,
+    axis: int,
+    weights: NDArray[np.float64] | float = 1,
+    normalizedvar: bool = False
 ) -> tuple[NDArray]:
     '''
     Function to compute mean and variance of an arbitrary dataset along a
@@ -25,7 +29,15 @@ def MeanVariance(
     - self.var{setname}:        variannce of dataset
     '''
     data = getattr(obj, setname)
-    mean = np.mean(data, axis=axis)
+
+    # normalise weights
+    if isinstance(weights, np.ndarray):
+        weights = weights/np.sum(weights)
+    else:
+        weights = weights/data.shape[axis]
+    
+    mean = np.sum(weights*data, axis=axis)
+    
 
     if normalizedvar:
         var = np.sqrt(
