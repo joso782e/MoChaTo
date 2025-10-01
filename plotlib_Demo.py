@@ -2,7 +2,6 @@ import os
 from os.path import exists
 import sys
 sys.path.append(os.path.dirname(__file__))
-import MoChaTo_datalib as datalib
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.optimize as opt
@@ -66,7 +65,7 @@ class PlotData:
             )
         
         if not "plot" in rules.keys():
-            print(
+            Warning(
                 "Warning! Input dictionary 'rules' does not contain key " \
                 "'plot'. The key is added to 'rules' and the string " \
                 "'diag' is assigned."
@@ -74,7 +73,7 @@ class PlotData:
             rules['plot'] = "diag"
         
         if not "representation" in rules.keys():
-            print(
+            Warning(
                 "Warning! Input dictionary 'rules' does not contain key "
                 "'representation'. The key is added to 'rules' and the " \
                 "string 'direct' is assigned."
@@ -82,7 +81,7 @@ class PlotData:
             rules['representation'] = "direct"
         
         if not "xscale" in rules.keys():
-            print(
+            Warning(
                 "Warning! Input dictionary 'rules' does not contain key " \
                 "'xscale'. The key is added to 'rules' and the string " \
                 "'linear' is assigned."
@@ -90,7 +89,7 @@ class PlotData:
             rules['xscale'] = "linear"
 
         if not "yscale" in rules.keys():
-            print(
+            Warning(
                 "Warning! Input dictionary 'rules' does not contain key " \
                 "'yscale'. The key is added to 'rules' and the string " \
                 "'linear' is assigned."
@@ -98,7 +97,7 @@ class PlotData:
             rules['yscale'] = "linear"
 
         if not 'labels' in rules.keys():
-            print(
+            Warning(
                 "Warning! Input dictionary 'rules' does not contain key " \
                 "'labels'. Graph labels will be ['data1', 'data2', ...]."
             )
@@ -111,14 +110,14 @@ class PlotData:
         yData: np.ndarray
     ) -> None:
         '''
-        Method to check whether input data arrays have the same shape
+        Method to check whether input data arrays are broadcastable
         '''
         xData = np.array(xData)
         yData = np.array(yData)
 
-        if yData.size[0] != xData.size[0]:
+        if yData.shape[0] != xData.shape[0]:
             yData = yData.T
-            if yData.size[0] != xData.size[0]:
+            if yData.shape[0] != xData.shape[0]:
                 raise ValueError(
                     f"Warning! The shape of xData {xData.shape} and " \
                     f"yData {yData.T.shape} can not be broadcasted " \
@@ -220,24 +219,26 @@ class PlotData:
                     getattr(obj, rules['ydata']) for obj in dataList
                     if getattr(obj, sort) == val
                 ]
-                self.labels.append(f'{sort} = {val}')
+                label = f'{sort} = {val}'
                 xData, yData = self.CheckDataArrays(xData, yData)
-                yield(xData, yData)
+                yield(xData, yData, label)
         else:
             if 'labels' in rules.keys():
-                self.labels = rules['labels']
+                labelCycler = Cycler(rules['labels'])
             else:
                 i = 0
 
             for obj in dataList:
                 xData = getattr(obj, rules['xdata'])
                 yData = getattr(obj, rules['ydata'])
-                if not ('labels' in rules.keys()):
-                    self.labels.append(f'data{i+1}')
+                if 'labels' in rules.keys():
+                    label = labelCycler.Cycle()
+                else:
+                    label = f'data{i+1}'
                     i += 1
                     
                 xData, yData = self.CheckDataArrays(xData, yData)
-                yield(xData, yData)
+                yield(xData, yData, label)
 
     def AddData2Plot(
         self,
@@ -249,10 +250,39 @@ class PlotData:
         rules = self.rules
         ax = self.ax
 
-        labelCycler = Cycler(self.labels)
-        
+        if 'ls' in rules.keys() or 'linestyle' in rules.keys():
+            if 'ls' in rules.keys():
+                rules['linestyle'] = rules['ls']
+            lsCycler = Cycler(rules['linestyle'])
+        else:
+            lsCycler = Cycler(['-'])
 
-        for xData, yData in self.GetData(sort=sort):
+        if 'linewidth' in rules.keys():
+            lwCycler = Cycler(rules['linewidth'])
+        else:
+            lwCycler = Cycler([1])
+
+        if 'color' in rules.keys():
+            colorCycler = Cycler(rules['color'])
+        else:
+            colorCycler = Cycler(
+                [
+                    'blue', 'orange', 'green', 'red', 'purple', 'brown',
+                    'pink', 'grey', 'olive', 'cyan'
+                ]
+            )
+
+        if 'marker' in rules.keys():
+            markerCycler = Cycler(rules['marker'])
+        else:
+            markerCycler = Cycler(['o'])
+
+        if 'markersize' in rules.keys():
+            sizeCycler = Cycler(rules['markersize'])
+        else:
+            sizeCycler = Cycler([5])
+
+        for xData, yData, label in self.GetData(sort=sort):
             if rules['representation'] == 'Kratky':
                 yData = np.multiply(yData, xData**2)
 
@@ -289,17 +319,20 @@ class PlotData:
                 fillHandle = ax.fill_between(
                     xFill, upperFill, lowerFill, color='orange', alpha=0.4
                 )
-            
+
             dataHandle = ax.plot(
-                xData, yData
+                xData, yData, label=label,
+                linestyle=lsCycler.Cycle(), linewidth=lwCycler.Cycle(),
+                marker=markerCycler.Cycle(), markersize=sizeCycler.Cycle(),
+                color=colorCycler.Cycle()
             )
 
             if rules['plot'] == 'statistical binning':
                 handles = [(dataHandle, vLineHandle, hLineHandle), fillHandle]
-                labels = [labelCycler.Cycle(), 'data scattering']
+                labels = [label, 'data scattering']
             else:
                 handles = dataHandle
-                labels = labelCycler.Cycle()
+                labels = [label]
 
             ax.legend(
                 handles, labels
@@ -699,7 +732,7 @@ def SavePlot(
 
 
 def SCNPFilter(
-    dataobj: datalib.FileData,
+    dataobj,
     N: int,
     constrains: dict,
     condition: list[str]
@@ -761,8 +794,10 @@ def SCNPFilter(
 
 
 def FilterPlotSCNP(
-    dataobj:datalib.FileData, constrains:dict, condition:list[str],
-    SCNPpath:str
+    dataobj,
+    constrains: dict,
+    condition: list[str],
+    SCNPpath: str
 ) -> None:
     '''
     
