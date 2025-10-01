@@ -349,9 +349,46 @@ class PlotData:
                 handles.append(dataHandle)
                 labels.append(label)
 
-        ax.legend(
-            handles, labels
-        )
+        ax.legend(handles, labels)
+
+        # remove duplicate legend entries
+            # get legend handles and labels, create dictionary and replot
+            # legend
+            # source: (
+            #   https://stackoverflow.com/questions/13588920/
+            #   stop-matplotlib-repeating-labels-in-legend
+            # )
+        handles, labels = plt.gca().get_legend_handles_labels()
+        labeldict= dict(zip(labels, handles))
+        ax.legend(labeldict.values(), labeldict.keys())
+    
+    def SavePlot(
+        self,
+        name: str = False,
+        path: str = False
+    ) -> None:
+        '''
+        
+        '''
+        rule = self.rule
+        if name:
+            if path:
+                SavePlot(
+                    fig=self.fig, name=f'{name}', path=path
+                )
+            else:
+                SavePlot(
+                    fig=self.fig, name=f'{name}', path=self.figpath
+                )
+        else:
+            if path:
+                SavePlot(
+                    fig=self.fig, name=f'f_{rule.fname}', path=path
+                )
+            else:
+                SavePlot(
+                    fig=self.fig, name=f'f_{rule.fname}', path=self.figpath
+                )
 
 
 class PlotSCNP:
