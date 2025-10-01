@@ -11,7 +11,13 @@ import plotlib_Demo as plotlib
 class test:
     def __init__(self, func, N, f):
         self.x = np.linspace(0, 10, 100)
+        self.x = np.concatenate([
+            self.x + np.random.normal(0, 0.1, 100),
+            self.x + np.random.normal(0, 0.1, 100),
+            self.x + np.random.normal(0, 0.1, 100)
+        ])
         self.y = func(self.x)
+        self.y = self.y + np.random.normal(0, 0.1, 300)
         self.N = N
         self.f = f
 
@@ -26,10 +32,9 @@ rules = {
     'xlabel': 'X-axis',
     'ylabel': 'Y-axis',
     'labels': ['sin(x)', 'cos(x)'],
-    'xlim': (0, 10),
-    'ylim': (-1, 1),
     'ls': ['-', '--'],
-    'color': ['blue', 'red']
+    'color': ['blue', 'red'],
+    'plot': 'statistical binning'
 }
 
 plot = plotlib.PlotData(rules, data)

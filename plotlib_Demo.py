@@ -65,15 +65,25 @@ class PlotData:
             )
         
         if not "plot" in rules.keys():
-            Warning(
+            print(
                 "Warning! Input dictionary 'rules' does not contain key " \
                 "'plot'. The key is added to 'rules' and the string " \
                 "'diag' is assigned."
             )
             rules['plot'] = "diag"
         
+        if rules['plot'] == 'statistical binning':
+            if not "bins" in rules.keys():
+                print(
+                    "Warning! Input dictionary 'rules' does not contain key " \
+                    "'bins'. The key is added to 'rules' and the value 20 " \
+                    "is assigned. This corresponds to 20 evenly spaced " \
+                    "bins on the x axis."
+                )
+                rules['bins'] = 20
+
         if not "representation" in rules.keys():
-            Warning(
+            print(
                 "Warning! Input dictionary 'rules' does not contain key "
                 "'representation'. The key is added to 'rules' and the " \
                 "string 'direct' is assigned."
@@ -81,7 +91,7 @@ class PlotData:
             rules['representation'] = "direct"
         
         if not "xscale" in rules.keys():
-            Warning(
+            print(
                 "Warning! Input dictionary 'rules' does not contain key " \
                 "'xscale'. The key is added to 'rules' and the string " \
                 "'linear' is assigned."
@@ -89,7 +99,7 @@ class PlotData:
             rules['xscale'] = "linear"
 
         if not "yscale" in rules.keys():
-            Warning(
+            print(
                 "Warning! Input dictionary 'rules' does not contain key " \
                 "'yscale'. The key is added to 'rules' and the string " \
                 "'linear' is assigned."
@@ -97,7 +107,7 @@ class PlotData:
             rules['yscale'] = "linear"
 
         if not 'labels' in rules.keys():
-            Warning(
+            print(
                 "Warning! Input dictionary 'rules' does not contain key " \
                 "'labels'. Graph labels will be ['data1', 'data2', ...]."
             )
@@ -211,14 +221,14 @@ class PlotData:
                 [getattr(obj, sort) for obj in dataList]
             )
             for val in sortVals:
-                xData = [
+                xData = np.concatenate([
                     getattr(obj, rules['xdata']) for obj in dataList
                     if getattr(obj, sort) == val
-                ]
-                yData = [
+                ])
+                yData = np.concatenate([
                     getattr(obj, rules['ydata']) for obj in dataList
                     if getattr(obj, sort) == val
-                ]
+                ])
                 label = f'{sort} = {val}'
                 xData, yData = self.CheckDataArrays(xData, yData)
                 yield(xData, yData, label)
@@ -260,7 +270,7 @@ class PlotData:
         if 'linewidth' in rules.keys():
             lwCycler = Cycler(rules['linewidth'])
         else:
-            lwCycler = Cycler([1])
+            lwCycler = Cycler([1.0])
 
         if 'color' in rules.keys():
             colorCycler = Cycler(rules['color'])
@@ -282,6 +292,9 @@ class PlotData:
         else:
             sizeCycler = Cycler([5])
 
+        handles = []
+        labels = []
+
         for xData, yData, label in self.GetData(sort=sort):
             if rules['representation'] == 'Kratky':
                 yData = np.multiply(yData, xData**2)
@@ -290,10 +303,10 @@ class PlotData:
                 xData, yData, xErr, yErr, xScatter, yScatter = BinData(
                     xData, yData, rules['bins']
                 )
-                xMin, xMax, yPos = ComputeErrorbarLimits(
+                yMin, yMax, xPos = ComputeErrorbarLimits(
                     xData, yData, xErr, 'x'
                 )
-                yMin, yMax, xPos = ComputeErrorbarLimits(
+                xMin, xMax, yPos = ComputeErrorbarLimits(
                     xData, yData, yErr, 'y'
                 )
 
@@ -325,18 +338,20 @@ class PlotData:
                 linestyle=lsCycler.Cycle(), linewidth=lwCycler.Cycle(),
                 marker=markerCycler.Cycle(), markersize=sizeCycler.Cycle(),
                 color=colorCycler.Cycle()
-            )
+            )[0]
 
             if rules['plot'] == 'statistical binning':
-                handles = [(dataHandle, vLineHandle, hLineHandle), fillHandle]
-                labels = [label, 'data scattering']
+                handles.append((dataHandle, vLineHandle, hLineHandle))
+                handles.append(fillHandle)
+                labels.append(label)
+                labels.append('data scattering')
             else:
-                handles = dataHandle
-                labels = [label]
+                handles.append(dataHandle)
+                labels.append(label)
 
-            ax.legend(
-                handles, labels
-            )
+        ax.legend(
+            handles, labels
+        )
 
 
 class PlotSCNP:
