@@ -6,7 +6,7 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-import plotlib_Demo as plotlib
+import MoChaTo_plotlib as plotlib
 
 class test:
     def __init__(self, func, N, f):
