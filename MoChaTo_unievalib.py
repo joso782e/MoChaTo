@@ -2,6 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 import scipy.linalg as lin
 import scipy.optimize as opt
+import scipy.signal as sig
 from sklearn.decomposition import PCA
 
 
@@ -51,6 +52,7 @@ def MeanVariance(
     setattr(obj, f'mean{setname}', mean)
     setattr(obj, f'var{setname}', var)
     return mean, var
+
 
 def ManipulateData(
         obj,  args:list[str], setname:str, operant:str, axis:int=None
@@ -224,10 +226,12 @@ def ScaleData(obj, setname:str, scalfac:NDArray[np.float64]):
     return scalfac*data
 
 def PerfPCA(
-        obj, setname:str, transpose:bool=False
+        obj, setname: str,
+        transpose: bool = False,
+        n_components: int = 2
     ) -> None:
     '''
-    Function to peform PCA () on data and store results in self, PCA is
+    Function to peform PCA on data and store results in obj, PCA is
     performed as such that samples are along axis 0 and features along
     axis 1
 
@@ -239,16 +243,16 @@ def PerfPCA(
 
     Output:
     updates self with new attributes as follows:
-    - self.{setname}c{i} for i = 1, ..., n_components coordinates in
-    PC-space
-    - self.{setname}PC{i} for i = 1, ..., n_components Principal components
+    - obj.{setname}c{i} for i = 1, ...,     n_components coordinates in
+                                            PC-space
+    - obj.{setname}PC{i} for i = 1, ...,    n_components Principal components
     '''
     dataset = getattr(obj, setname)
-    pcaobj = obj.pcaobj
+    pcaobj = PCA(n_components=n_components)
     trafo = pcaobj.fit_transform(
         dataset.T if transpose else dataset
     )
-    for i in range(pcaobj.n_components):
+    for i in range(n_components):
         setattr(obj, f'{setname}c{i+1}', trafo[:,i])
         setattr(obj, f'{setname}PC{i+1}', pcaobj.components_[i,:])
 
@@ -405,3 +409,65 @@ def PerfFit(
                 f.append(fit[j])
 
                 setattr(obj, f'{fitname}{j}', f)
+
+
+def Extrema(
+    xdata:np.ndarray, ydata:np.ndarray, order:int
+) -> np.ndarray:
+    '''
+    Function to compute the extrema of a series
+
+    Input:
+    xdata (dtype = np.ndarray)...   array with x-values
+    ydata (dtype = np.ndarray)...   array with y-values
+
+    Output:
+    extrema...                      ndarray containing all extrema i with 
+                                    x-coordinate in [i] and y-coordinate
+                                    in [i+1]
+    '''
+    maxind = sig.argrelmax(ydata, order=order)[0]
+    minind = sig.argrelmin(ydata, order=order)[0]
+
+    xtrem = np.concat([xdata[maxind], xdata[minind]])
+    ytrem = np.concat([ydata[maxind], ydata[minind]])
+
+    ytrem = ytrem[np.argsort(xtrem)]
+    xtrem = np.argsort(xtrem)
+
+    extrema = np.array(list(zip(xtrem, ytrem)))
+    print(extrema)
+
+    return extrema.flatten()
+
+
+def Inflection(
+    xdata:np.ndarray, ydata:np.ndarray, order:int
+) -> tuple[np.ndarray, int, int]:
+    '''
+    Function to compute the inflection points of a series
+    
+    Input:
+    xdata (dtype = np.ndarray)...   array with x-values
+    ydata (dtype = np.ndarray)...   array with y-values
+
+    Output:
+    inflection...                   ndarray containing all inflection points i
+                                    with x-coordinate in [i] and y-coordinate
+                                    in [i+1]
+    '''
+    ydata = np.diff(ydata)
+
+    return Extrema(xdata[:-1], ydata, order=order)
+
+
+def FiniteSum(kterm, kstart:int, kstop:int) -> float:
+    '''
+    Function to compute finite sum of a given function kterm from kstart to
+    kstop
+    '''
+    finalsum = 0
+    for k in range(kstart, kstop+1):
+        finalsum += kterm(k)
+
+    return finalsum
