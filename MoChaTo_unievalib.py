@@ -10,7 +10,7 @@ def MeanVariance(
     obj,
     setname: str,
     axis: int,
-    weights: NDArray[np.float64] | float = 1,
+    weights: NDArray[np.float64] | None = None,
     normalizedvar: bool = False
 ) -> tuple[NDArray]:
     '''
@@ -26,28 +26,26 @@ def MeanVariance(
 
     
     updates self with new attributes as follows:
-    - self.mean{setname}:          mean of dataset
-    - self.var{setname}:        variannce of dataset
+    - self.mean{setname}:       mean of dataset
+    - self.var{setname}:        variance of dataset mean
     '''
     data = getattr(obj, setname)
+    N = data.shape[axis]
 
-    # normalise weights
     if isinstance(weights, np.ndarray):
+        # normalise weights
         weights = weights/np.sum(weights)
     else:
-        weights = weights/data.shape[axis]
+        # set weights to uniform weights
+        weights = np.array(1/N)
     
     mean = np.sum(weights*data, axis=axis)
-    
+    mean2 = np.sum(weights*data**2, axis=axis)
 
+    var = (mean2 - mean**2)/(N-1)
+    
     if normalizedvar:
-        var = np.sqrt(
-            np.mean((data - mean)**2/mean**2, axis=axis)
-        )
-    else:
-        var = np.sqrt(
-            np.mean((data - mean)**2, axis=axis)
-        )
+        var = var/mean**2
     
     setattr(obj, f'mean{setname}', mean)
     setattr(obj, f'var{setname}', var)
@@ -255,6 +253,7 @@ def PerfPCA(
     for i in range(n_components):
         setattr(obj, f'{setname}c{i+1}', trafo[:,i])
         setattr(obj, f'{setname}PC{i+1}', pcaobj.components_[i,:])
+    setattr(obj, 'explained_variance', pcaobj.explained_variance_ratio_)
 
 
 def PerfRecon(obj, setname:str, normalize:bool=True) -> None:

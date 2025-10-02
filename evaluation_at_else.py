@@ -55,11 +55,6 @@ def FitGyraRad(x, a0, a1):
     '''
     return a0 - 1/3*(a1*x)**2
 
-def ScatterRange():
-    '''
-    
-    '''
-
 
 import json
 with open(
@@ -72,12 +67,12 @@ import os
 from os.path import exists
 import sys
 sys.path.append(os.path.dirname(__file__))
+import MoChaTo_unievalib as unievalib
 import MoChaTo_datalib as datalib
 import MoChaTo_plotlib as plotlib
 import glob
 import h5py
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 # print statement if the script is executed
@@ -91,12 +86,12 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         os.makedirs(eva_path)
 
 
-    DataObjs = []           # list to store all data objects
+    dataObjs = []           # list to store all data objects
     
     
     with h5py.File(path, 'r') as file:
         file.visit(
-            lambda x: DataObjs.append(
+            lambda x: dataObjs.append(
                 datalib.filter_func(name=x, file=file)
             )
         )
@@ -165,89 +160,37 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
 
     # remove None and select relevant data objects
     if type(plotaspects['Nrule']) is list and type(plotaspects['frule']) is list:
-        DataObjs = [
-            obj for obj in DataObjs if obj and (
+        dataObjs = [
+            obj for obj in dataObjs if obj and (
                 obj.N in plotaspects['Nrule'] and obj.f in plotaspects['frule']
             )
         ]
     elif type(plotaspects['Nrule']) is list:
-        DataObjs = [
-            obj for obj in DataObjs if obj and obj.N in plotaspects['Nrule']
+        dataObjs = [
+            obj for obj in dataObjs if obj and obj.N in plotaspects['Nrule']
         ]
     elif type(plotaspects['frule']) is list:
-        DataObjs = [
-            obj for obj in DataObjs if obj and obj.f in plotaspects['frule']
+        dataObjs = [
+            obj for obj in dataObjs if obj and obj.f in plotaspects['frule']
         ]
     else:
-        DataObjs = [obj for obj in DataObjs if obj]
+        dataObjs = [obj for obj in dataObjs if obj]
 
 
-    for obj in DataObjs:
-        # perform fit for radii of gyration
-        obj.PerfFit(
-            FitFunc=FitGyraRad, xdata='q', ydata='S', fitname='Rg',
-            xlim=(None, 2e-2)
+    for obj in dataObjs:
+        unievalib.ManipulateData(
+            obj, ['q', 'q', 'S'], 'kratkyS', operant='*'
         )
-        # compute compactness of polymers
-        obj.compactness = obj.Rg1/obj.N
-
-        obj.SwellingRatio()
-
-        obj.LoopBalanceProfile()
-
-        obj.ConClassRatio()
-
-        obj.LLCalc()
-
-        obj.idealR = np.sqrt(np.array([
-            np.sum(1/obj.rouseeigv[i])/obj.N for i in range(len(obj.rouseeigv))
-        ]))
-
-        #obj.Blockiness(blocktype=int(plotaspects['ydata'][1]), normalize=True)
-
-        # calculate qqS
-        obj.ManipulateData(args=['q', 'q', 'S'], setname='qqS', operant='*')
-
-
-        # perform PCA on 'qqS'
-        obj.PerfPCA(setname='qqS')
-        obj.PerfRecon(setname='qqS', normalize=True)
-        obj.LoopBalanceProfile()
-        obj.MeanVariance(setname='qqS', axis=0, normalizedvar=False)
-        obj.ScaleData(setname=plotaspects['xdata'], scalfac=1e3)        
-
-
-        if plotaspects['plot'] == 'errorbar':
-            obj.BinData(
-                xdata=f'scaled{plotaspects['xdata']}',
-                ydata=f'{plotaspects['ydata']}', bins=20, ppb=False
-            )
-
-            if len([plotaspects['ydata']]) == 1 and len(plotaspects['frule']) == 1:
-                x1 = getattr(obj, f'binmeanscaled{plotaspects['xdata']}') + getattr(obj, f'binerrscaled{plotaspects['xdata']}')
-                x2 = getattr(obj, f'binmeanscaled{plotaspects['xdata']}') - getattr(obj, f'binerrscaled{plotaspects['xdata']}')
-                fillx = np.concatenate([x1,x2])
-                fillx = np.sort(fillx)
-                uppery = getattr(obj, f'binmean{plotaspects['ydata']}') + getattr(obj, f'binerr{plotaspects['ydata']}')
-                uppery = np.repeat(uppery, 2)
-                lowery = getattr(obj, f'binmean{plotaspects['ydata']}') - getattr(obj, f'binerr{plotaspects['ydata']}')
-                lowery = np.repeat(lowery, 2)
-        
-        
-    if plotaspects['plot'] == 'errorbar':
-        plotaspects['xerr'] = f'binmeanerrscaled{plotaspects['xdata']}'
-        plotaspects['yerr'] = f'binmeanerr{plotaspects['ydata']}'
-        plotaspects['xdata'] = f'binmeanscaled{plotaspects['xdata']}'
-        plotaspects['ydata'] = f'binmean{plotaspects['ydata']}'
-
-    evaplot = plotlib.PlotData(plotaspects, DataObjs)
-    evaplot.GetData()
-    evaplot.CreatePlot()
-    if plotaspects['plot'] == 'errorbar' and len([plotaspects['ydata']]) == 1  and len(plotaspects['frule']) == 1:
-        evaplot.ax.fill_between(
-            fillx, uppery, lowery, color='orange', alpha=0.4
+        unievalib.PerfPCA(
+            obj, 'kratkyS', n_components=NComps
         )
-    evaplot.SavePlot()
-    
+
+
+    evaplot = plotlib.PlotData(plotaspects, dataObjs)
+    evaplot.CreateFigure(
+        title=plotaspects['title'], xLabel=plotaspects['xlabel'],
+        yLabel=plotaspects['ylabel'], figsize=plotaspects['figsize']
+    )
+
 
 print('Evaluation finished')
