@@ -22,7 +22,7 @@ from sklearn.decomposition import PCA
 print("Module \"MoChaTo_datalib.py\" imported successfully")
 
 
-with open('.\\data_evaluation\\Scripts\\config.json', 'r') as configf:
+with open('config.json', 'r') as configf:
     config = json.load(configf)
 
 
@@ -68,7 +68,6 @@ class FileData:
         file: h5py.File,
         path: str,
         filter_obj: str,
-        ncomps: int
     ) -> 'FileData':
 
         l = len(filter_obj)         # length of filter_object
@@ -116,7 +115,7 @@ class FileData:
         sequence = np.squeeze(file[path[:-l]+'sequence'])
 
         return FileData(
-            n_components=ncomps, condi=Cond, N=NChain, f=InterconDens, q=qKey,
+            condi=Cond, N=NChain, f=InterconDens, q=qKey,
             S=SData, clmat=crosslinks, sequence=sequence
         )
 
@@ -271,8 +270,12 @@ class FileData:
 
         setattr(self, 'swellingratio', Q)
         return Q
-    
-    def ConClassRatio(self) -> tuple[list,list,list]:
+
+    def TopoRatio(
+        self,
+        minLoopLength: int = 0,
+        nextNeighbor: bool = False,
+    ) -> tuple[list,list,list]:
         '''
         Function to compute the conformation class ratios by the type 1 loop
         conformation convention for several molecules
@@ -285,15 +288,15 @@ class FileData:
 
         Output:
         updates self with new attributes as follows:
-        - self.conratio1...         ratio for loops in series
-        - self.conratio2...         ratio for entagled loop conformations
-        - self.conratio3...         ratio for parallel loop conformations
+        - self.toporatio1...         ratio for loops in series
+        - self.toporatio2...         ratio for entagled loop conformations
+        - self.toporatio3...         ratio for parallel loop conformations
         '''
         clmat = self.clmat
-
-        conratio1 = []
-        conratio2 = []
-        conratio3 = []
+    
+        toporatio1 = []
+        toporatio2 = []
+        toporatio3 = []
 
 
         for k in range(clmat.shape[0]):
@@ -301,22 +304,26 @@ class FileData:
                 (clmat[k,n,1], clmat[k,n,2]) for n in range(clmat.shape[1])
                 if clmat[k,n,0]
             ]
+            cls = [
+                (alpha, omega) if alpha < omega else (omega, alpha) for (alpha, omega) in cls
+            ]
 
-            p1, p2, p3 = ConClassRatio(cls)
+            p1, p2, p3 = TopoRatio(cls, minLoopLength, nextNeighbor)
 
-            conratio1.append(p1)
-            conratio2.append(p2)
-            conratio3.append(p3)
+            toporatio1.append(p1)
+            toporatio2.append(p2)
+            toporatio3.append(p3)
 
-        self.conratio1 = conratio1
-        self.conratio2 = conratio2
-        self.conratio3 = conratio3
+        self.toporatio1 = toporatio1
+        self.toporatio2 = toporatio2
+        self.toporatio3 = toporatio3
 
-        return conratio1, conratio2, conratio3
-        
+        return toporatio1, toporatio2, toporatio3
+
 def filter_func(
-        name:str, file:h5py.File, NComps:int=config['NComps'],
-        filter_obj:str=config['filter_obj']
+        name: str,
+        file: h5py.File,
+        filter_obj: str = config['filter_obj']
 ) -> FileData:
     '''
     Function to filter data groups in .hdf5 'input_file' that contain the
@@ -342,8 +349,7 @@ def filter_func(
         print(f'{name}')
 
         DataObj = FileData.ExtractFileData(file=file, path=name,\
-                                           filter_obj=filter_obj,\
-                                           ncomps=NComps)        
+                                           filter_obj=filter_obj)        
 
         # print separator line to indicate end of one condition evaluation in 
         # terminal for debugging
@@ -503,7 +509,10 @@ def RouseMatrix(
     return rouse
 
 
-def ConformationType1(i:tuple[int,int], j:tuple[int,int]) -> int:
+def CircuitTopology(
+    i:tuple[int,int],
+    j:tuple[int,int]
+) -> int:
     '''
     Function to compare two loops with each other and determine their
     conformation class in the type 1 convention, further explanations can be
@@ -547,41 +556,53 @@ def ConformationType1(i:tuple[int,int], j:tuple[int,int]) -> int:
     return conclass  
 
 
-def ConClassRatio(cls:list[tuple]) -> tuple[float,float,float]:
+def TopoRatio(
+    cls:list[tuple],
+    minLoopLength: int = 0,
+    nextNeighbor: int = 0
+) -> tuple[float,float,float]:
     '''
     Function to compute the conformation class ratios by the type 1 loop
     conformation convention, further explanations can be found in the Bachelor
     thesis
-    conformation class:
+    circuti topology conformation:
         - 1: loops in series
         - 2: loops entangled
         - 3: loops parallel
 
     Input:
-    cls (dtype = list[tuple])...    list of tuples, each tuple contains the
-                                    link's monomers
+    cls (dtype = list[tuple])...    list of tuples, each tuple contains
+                                    indices of cross-linked monomers, expects
+                                    Tuples to be (x,y): x < y
 
     Output:
-    p1 (dtype = float)...           ration of conformation class 1
-    p2 (dtype = float)...           ration of conformation class 2
-    p3 (dtype = float)...           ration of conformation class 3
+    p1 (dtype = float)...           ratio of conformation class 1
+    p2 (dtype = float)...           ratio of conformation class 2
+    p3 (dtype = float)...           ratio of conformation class 3
     '''
+    cls = [cl for cl in cls if np.abs(cl[0] - cl[1]) >= minLoopLength]
+    cls.sort(key=lambda x: x[0])
     L = len(cls)
-    C = L*(L - 1)/2
-    if C == 0:
+    if L < 2:
         return 0, 0, 0
     loopcon = np.zeros((L, L), dtype=int)
 
+    if 2*nextNeighbor > L:
+        raise ValueError(
+            'Input for "nextNeighbor" is too large for number of loops ' \
+            'available in this polymer.'
+        )
+
     for ind, _ in np.ndenumerate(loopcon):
+        if np.abs(ind[0] - ind[1]) > nextNeighbor or ind[0] == ind[1]:
+            continue
         i = cls[ind[0]]
         j = cls[ind[1]]
-        if i == j:
-            continue
-
-        loopcon[ind] = ConformationType1(i, j)
+        loopcon[ind] = CircuitTopology(i, j)
     
-    p1 = np.sum(loopcon == 1)/2/C
-    p2 = np.sum(loopcon == 2)/2/C
-    p3 = np.sum(loopcon == 3)/2/C
+    C = np.sum(loopcon != 0)*2      # total number of loop conformations
+    p1 = np.sum(loopcon == 1)/C     # ratio of loops in series
+    p2 = np.sum(loopcon == 2)/C     # ratio of entangled loops
+    p3 = np.sum(loopcon == 3)/C     # ratio of parallel loops
 
     return p1, p2, p3

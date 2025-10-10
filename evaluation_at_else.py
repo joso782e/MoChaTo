@@ -10,7 +10,7 @@ at TU Dresden and Leibniz Institute of Polymer Research
 This script it used to get and evaluate simulated data from an .hdf5 file. It
 is part of a bachelor thesis in physics.
 '''
-NComps = 2                      # number of principle components to perform
+NComps = 5                      # number of principle components to perform
                                 # PCA with
 binnum = 30                     # number of bins for hinstogramm plots
 TestRun = True                  # set to True if only a test run is needed:
@@ -33,19 +33,10 @@ search_crit = root_dir + '\\**\\*.hdf5'.replace('\\\\', seperator)
 
 
 filter_obj = 'swell_sqiso_key'
-eva_path = root_dir +\
-    '\\data_evaluation\\script_evaluation\\PCA_on_qqS'.replace('\\\\', seperator)
 
 
 config = {
-    'NComps' : NComps,
-    'binnum' : binnum,
-    'root_dir' : root_dir,
-    'search_crit' : search_crit,
-    'filter_obj' : filter_obj,
-    'eva_path' : eva_path,
-    'fileformat' : '.svg',
-    'system' : system,
+    'filter_obj' : filter_obj
 }
 
 
@@ -57,9 +48,7 @@ def FitGyraRad(x, a0, a1):
 
 
 import json
-with open(
-    '.\\data_evaluation\\Scripts\\config.json'.replace('\\\\', seperator),
-    'w') as configf:
+with open('config.json'.replace('\\\\', seperator),'w') as configf:
     json.dump(config, configf)
 
 
@@ -82,9 +71,6 @@ print('Executing evaluation script...')
 
 
 for path in glob.glob(root_dir+search_crit, recursive=True):
-    if not exists(eva_path):
-        os.makedirs(eva_path)
-
 
     dataObjs = []           # list to store all data objects
     
@@ -134,12 +120,12 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     
     plotaspects['figsize'] = (6,4)
     plotaspects['Nrule'] = [100]
-    plotaspects['frule'] = [1/4]
-    plotaspects['title']= r'Standard deviation of mean loop position binned over $c_2$'
-    plotaspects['xlabel'] = r'$c_2 \cdot 10^3$'
-    plotaspects['ylabel'] = r'$s_{n_l}$'
-    plotaspects['xdata'] = 'qqSc2'
-    plotaspects['ydata'] = 'loopdev'
+    plotaspects['frule'] = [1/2]
+    plotaspects['title']= r'Topology ratio of loops in series vs. $c_1$, next neighbor only'
+    plotaspects['xlabel'] = r'$c_1$'
+    plotaspects['ylabel'] = r'$p_1$'
+    plotaspects['xdata'] = 'kratkySc1'
+    plotaspects['ydata'] = 'toporatio1'
     plotaspects['xlim'] = [None, None]
     plotaspects['ylim'] = [None, None]
     plotaspects['xscale'] = 'linear'
@@ -149,12 +135,12 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
     plotaspects['marker'] = 'o'
     plotaspects['ms'] = 3.5
     plotaspects['color'] = 'dodgerblue'
-    plotaspects['plotdomain'] = 'PCspace'
-    plotaspects['plot'] = 'errorbar'
+    plotaspects['representation'] = 'direct'
+    plotaspects['plot'] = 'statistical binning'
     plotaspects['sortby'] = 'f'
     plotaspects['legend'] = False
     plotaspects['legend_loc'] = 'upper left'
-    plotaspects['label'] = False
+    plotaspects['label'] = None
     plotaspects['binnum'] = 50
 
 
@@ -175,6 +161,8 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
         ]
     else:
         dataObjs = [obj for obj in dataObjs if obj]
+    
+    print(len(dataObjs), 'data sets selected for plotting')
 
 
     for obj in dataObjs:
@@ -185,12 +173,28 @@ for path in glob.glob(root_dir+search_crit, recursive=True):
             obj, 'kratkyS', n_components=NComps
         )
 
+        meanq = []
+        for i in range(NComps):
+            meanq.append(
+                unievalib.MeanVariance(
+                    obj, 'q', axis=0,
+                    weights=getattr(obj, f'kratkySPC{i+1}')**2
+                )[0]
+            )
+        obj.meanq = np.array(meanq)
+
+        obj.TopoRatio(
+            minLoopLength=0, nextNeighbor=1
+        )
+
 
     evaplot = plotlib.PlotData(plotaspects, dataObjs)
     evaplot.CreateFigure(
         title=plotaspects['title'], xLabel=plotaspects['xlabel'],
-        yLabel=plotaspects['ylabel'], figsize=plotaspects['figsize']
+        yLabel=plotaspects['ylabel'], figSize=plotaspects['figsize']
     )
+    evaplot.AddData2Plot(sort=plotaspects['sortby'])
+    evaplot.SavePlot(name=f'N{plotaspects["Nrule"]}_f{plotaspects["frule"]}')
 
 
 print('Evaluation finished')

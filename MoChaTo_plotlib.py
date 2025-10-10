@@ -229,7 +229,7 @@ class PlotData:
                     getattr(obj, rules['ydata']) for obj in dataList
                     if getattr(obj, sort) == val
                 ])
-                label = f'{sort} = {val}'
+                label = f'{sort} = {round(val,4)}'
                 xData, yData = self.CheckDataArrays(xData, yData)
                 yield(xData, yData, label)
         else:
@@ -263,16 +263,22 @@ class PlotData:
         if 'ls' in rules.keys() or 'linestyle' in rules.keys():
             if 'ls' in rules.keys():
                 rules['linestyle'] = rules['ls']
+            if not isinstance(rules['linestyle'], (list, tuple, np.ndarray)):
+                rules['linestyle'] = [rules['linestyle']]
             lsCycler = Cycler(rules['linestyle'])
         else:
             lsCycler = Cycler(['-'])
 
         if 'linewidth' in rules.keys():
+            if not isinstance(rules['linewidth'], (list, tuple, np.ndarray)):
+                rules['linewidth'] = [rules['linewidth']]
             lwCycler = Cycler(rules['linewidth'])
         else:
             lwCycler = Cycler([1.0])
 
         if 'color' in rules.keys():
+            if not isinstance(rules['color'], (list, tuple, np.ndarray)):
+                rules['color'] = [rules['color']]
             colorCycler = Cycler(rules['color'])
         else:
             colorCycler = Cycler(
@@ -283,11 +289,15 @@ class PlotData:
             )
 
         if 'marker' in rules.keys():
+            if not isinstance(rules['marker'], (list, tuple, np.ndarray)):
+                rules['marker'] = [rules['marker']]
             markerCycler = Cycler(rules['marker'])
         else:
             markerCycler = Cycler(['o'])
 
         if 'markersize' in rules.keys():
+            if not isinstance(rules['markersize'], (list, tuple, np.ndarray)):
+                rules['markersize'] = [rules['markersize']]
             sizeCycler = Cycler(rules['markersize'])
         else:
             sizeCycler = Cycler([5])
@@ -364,8 +374,9 @@ class PlotData:
     
     def SavePlot(
         self,
-        name: str = False,
-        path: str = False,
+        name: str = None,
+        path: str = None,
+        fileformat: str = '.svg',
         system: str = 'windows',
     ) -> None:
         '''
@@ -387,13 +398,16 @@ class PlotData:
 
         if not path:
             path = '.' + seperator + 'plots' + seperator +\
-            rules.plot + seperator + rules.representation + seperator +\
-            str(rules.ydata) + '_vs_'+ rules.xdata
-        
+            rules['plot'] + seperator + rules['representation'] + seperator +\
+            str(rules['ydata']) + '_vs_'+ str(rules['xdata'])
+
         if not name:
             name = 'diagram'
 
-        SavePlot(fig=self.fig, name=name, path=path, system=system)
+        SavePlot(
+            fig=self.fig, name=name, path=path, system=system, 
+            fileformat=fileformat
+        )
 
 
 class PlotSCNP:
@@ -520,9 +534,13 @@ class Cycler:
     def __init__(self, iterable):
         self.count = 0
         if not isinstance(iterable, (list, tuple, np.ndarray)):
-            raise TypeError(
-                f'Warning! Input of type {type(iterable)} not supported.'
-            )
+            try:
+                iterable = list(iterable)
+                Cycler(iterable)
+            except TypeError:
+                raise TypeError(
+                    f'Warning! Input of type {type(iterable)} not ' \
+                    'supported. Input must be of type list, tuple, ndarray.')
         self.iterable = iterable
     
     def Cycle(self):
